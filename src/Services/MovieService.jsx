@@ -13,7 +13,20 @@ class MovieService {
         }
         return data
     }
-    
+
+    async GetMovieById(movieId) {
+        const { data, error } = await supabase
+        .from('Movies')
+        .select('*')
+        .eq('id', movieId)
+        .single();
+
+        if (error) {
+            throw error;
+        }
+        return data;
+    }
+
 
     async addMovie(movieData) {
         const { data, error } = await supabase
@@ -27,6 +40,27 @@ class MovieService {
                 screenings: movieData.screenings // Array of objects
             }])
             .select();
+        
+        if (error) {
+            throw error;
+        }
+        return data;
+    }
+    
+    async updateMovie(movieId, movieData) {
+        const { data, error } = await supabase
+            .from('Movies')
+            .update({
+                title: movieData.title,
+                trailer_youtube_id: movieData.trailerYouTubeId,
+                duration: movieData.duration,
+                poster_url: movieData.posterUrl,
+                categories: movieData.categories, // Array of strings
+                screenings: movieData.screenings // Array of objects
+            })
+            .eq('id', movieId)
+            .select();
+
         
         if (error) {
             throw error;

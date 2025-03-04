@@ -5,6 +5,7 @@ import LoginView from './Views/LoginView'
 import DashboardView from './Views/DashboardView'
 import MoviesView from './Views/MoviesView'
 import AddMoviesView from './Views/AddMoviesView'
+import EditMovieView from './Views/EditMovieView'
 
 function App() {
   const [session, setSession] = useState(null);
@@ -48,6 +49,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardView />} />
             <Route path="/movies" element={<MoviesView />} />
             <Route path="/movies/add" element={<AddMoviesView />} />
+            <Route path="/movies/edit/:id" element={<EditMovieView />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </>
