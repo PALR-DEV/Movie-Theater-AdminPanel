@@ -26,6 +26,8 @@ export default function EditMovieView() {
     const [selectedCategories, setSelectedCategories] = useState([]);
     const [posterPreview, setPosterPreview] = useState('');
 
+
+
     useEffect(() => {
         const fetchMovieData = async () => {
             try {
@@ -107,43 +109,42 @@ export default function EditMovieView() {
     const handleFormSubmit = async(e) => {
         e.preventDefault();
         
-        // Validate required fields
-        if (!formData.title || !formData.duration) {
-            AlertUtils.showError('Please fill in all required fields');
-            return;
-        }
-
-        // Validate at least one screening is set up
-        const hasValidScreening = formData.screenings.some(screening => 
-            screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
-        );
-
-        if (!hasValidScreening) {
-            AlertUtils.showError('Please set up at least one screening with hall, days, and time slots');
-            return;
-        }
-
-        // Prepare the final form data
-        const finalFormData = {
-            ...formData,
-            categories: selectedCategories,
-            // Filter out empty screenings
-            screenings: formData.screenings.filter(screening => 
-                screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
-            )
-        };
-        
         try {
             AlertUtils.showLoading('Updating movie...');
-            // TODO: Add updateMovie method to MovieService
-            await movieService.updateMovie(id, finalFormData);
-            AlertUtils.closeLoading();
+            
+            const finalFormData = {
+                title: formData.title.trim(),
+                trailerYouTubeId: formData.trailerYouTubeId || '',
+                duration: formData.duration.trim(),
+                posterUrl: formData.posterUrl || '',
+                categories: selectedCategories,
+                screenings: formData.screenings.filter(screening => 
+                    screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
+                )
+            };
+            const updatedMovie = await movieService.updateMovie(id, finalFormData);
+            // Update local state with fresh data
+            if (updatedMovie) {
+                setFormData({
+                    title: updatedMovie.title,
+                    trailerYouTubeId: updatedMovie.trailer_youtube_id,
+                    duration: updatedMovie.duration,
+                    posterUrl: updatedMovie.poster_url,
+                    categories: updatedMovie.categories,
+                    screenings: updatedMovie.screenings
+                });
+                setSelectedCategories(updatedMovie.categories);
+            }
             
             AlertUtils.showSuccess('Movie updated successfully!');
+            // Force a refresh before navigation
+            await new Promise(resolve => setTimeout(resolve, 500));
             navigate('/movies');
         } catch (error) {
+            console.error('Update error:', error);
+            AlertUtils.showError(`Error updating movie: ${error.message}`);
+        } finally {
             AlertUtils.closeLoading();
-            AlertUtils.showError('Error updating movie: ' + error.message);
         }
     };
 
