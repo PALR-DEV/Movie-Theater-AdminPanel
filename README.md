@@ -1,7 +1,7 @@
 # Mayaguez Town Center Cinema - Admin Panel
 
 A modern, responsive web application for managing the Mayaguez Town Center Cinema operations. This administrative panel provides an intuitive interface for managing movies, screenings, and theater operations.
-
+[URL](https://palr-dev.github.io/Movie-Theater-AdminPanel/)
 ## Features
 
 ### Movie Management
