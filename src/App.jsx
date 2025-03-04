@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter as Router, Routes, Route, Navigate, HashRouter } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { supabase } from './Config/supabase'
 import LoginView from './Views/LoginView'
@@ -35,7 +35,7 @@ function App() {
   }
 
   return (
-    <Router>
+    <HashRouter basename='/'>
       <Routes>
         {!session ? (
           // Unauthenticated routes
@@ -55,7 +55,7 @@ function App() {
           </>
         )}
       </Routes>
-    </Router>
+    </HashRouter>
   )
 }
 
