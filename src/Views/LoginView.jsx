@@ -1,21 +1,24 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import authService from '../Services/AuthService'
 
 const LoginView = () => {
+    const navigate = useNavigate()
+    const [error, setError] = useState('')
     const [formData, setFormData] = useState({
         email: '',
         password: ''
     })
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        // Handle login logic here
-        console.log('Login attempt:', formData)
-        authService.Login(formData.email, formData.password).then((data) => {
-            console.log(data)
-        }).catch((error) => {
-            console.log(error)
-        })
+        setError('')
+        try {
+            await authService.Login(formData.email, formData.password)
+            navigate('/dashboard')
+        } catch (error) {
+            setError(error.message)
+        }
     }
 
     const handleChange = (e) => {
@@ -48,6 +51,11 @@ const LoginView = () => {
                         <h2 className="text-3xl font-extrabold text-black tracking-tight">
                             Sign in to your account
                         </h2>
+                        {error && (
+                            <div className="mt-2 text-sm text-red-600">
+                                {error}
+                            </div>
+                        )}
                         <p className="mt-2 text-sm text-gray-600">
                             Enter your credentials to access the admin panel
                         </p>

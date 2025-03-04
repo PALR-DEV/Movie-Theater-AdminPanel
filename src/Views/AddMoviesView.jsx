@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import Layout from './Layout';
+import movieService from '../Services/MovieService';
+import { Movie } from '../Models/Movie';
+import AlertUtils from '../Utils/AlertUtils';
 
 export default function AddMoviesView() {
     const [formData, setFormData] = useState({
@@ -9,7 +12,7 @@ export default function AddMoviesView() {
         posterUrl: '',
         categories: [],
         screenings: Array(5).fill().map(() => ({
-            hall: '',
+            sala: '',
             days: [],
             timeSlots: []
         }))
@@ -18,14 +21,24 @@ export default function AddMoviesView() {
     // Sample time slots - in a real app, this would come from an API
     const [newTimeSlot, setNewTimeSlot] = useState('');
 
+    const convertTo12HourFormat = (time24) => {
+        const [hours, minutes] = time24.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        return `${hour12}:${minutes} ${ampm}`;
+    };
+
     const handleAddTimeSlot = (hallIndex) => {
         if (!newTimeSlot) return;
+        
+        const formattedTime = convertTo12HourFormat(newTimeSlot);
         
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
-                if (index === hallIndex && !screening.timeSlots.includes(newTimeSlot)) {
-                    return { ...screening, timeSlots: [...screening.timeSlots, newTimeSlot] };
+                if (index === hallIndex && !screening.timeSlots.includes(formattedTime)) {
+                    return { ...screening, timeSlots: [...screening.timeSlots, formattedTime] };
                 }
                 return screening;
             })
@@ -38,32 +51,64 @@ export default function AddMoviesView() {
         'Viernes', 'Sábado', 'Domingo'
     ];
 
-    const [selectedHall, setSelectedHall] = useState('');
-    const [selectedDays, setSelectedDays] = useState([]);
-    const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const handleFormSubmit = async(e) => {
+        e.preventDefault();
+        
+        // Validate required fields
+        if (!formData.title || !formData.duration) {
+            AlertUtils.showError('Please fill in all required fields');
+            return;
+        }
 
-    const handleHallChange = (e) => {
-        const hall = e.target.value;
-        setSelectedHall(hall);
-        // Reset days and time slots when hall changes
-        setSelectedDays([]);
-        setSelectedTimeSlots([]);
-    };
-
-    const handleDayToggle = (day) => {
-        setSelectedDays(prev =>
-            prev.includes(day)
-                ? prev.filter(d => d !== day)
-                : [...prev, day]
+        // Validate at least one screening is set up
+        const hasValidScreening = formData.screenings.some(screening => 
+            screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
         );
-    };
 
-    const handleTimeSlotToggle = (timeSlot) => {
-        setSelectedTimeSlots(prev =>
-            prev.includes(timeSlot)
-                ? prev.filter(t => t !== timeSlot)
-                : [...prev, timeSlot]
-        );
+        if (!hasValidScreening) {
+            AlertUtils.showError('Please set up at least one screening with hall, days, and time slots');
+            return;
+        }
+
+        // Prepare the final form data
+        const finalFormData = {
+            ...formData,
+            categories: selectedCategories,
+            // Filter out empty screenings
+            screenings: formData.screenings.filter(screening => 
+                screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
+            )
+        };
+        
+        try {
+            AlertUtils.showLoading('Adding movie...');
+            await movieService.addMovie(finalFormData);
+            AlertUtils.closeLoading();
+            
+            AlertUtils.showSuccess('Movie added successfully!');
+            
+            // Reset form after successful submission
+            setFormData({
+                title: '',
+                trailerYouTubeId: '',
+                duration: '',
+                posterUrl: '',
+                categories: [],
+                screenings: Array(5).fill().map(() => ({
+                    sala: '',
+                    days: [],
+                    timeSlots: []
+                }))
+            });
+    
+            setSelectedCategories([]);
+            setPosterPreview('');
+            setNewTimeSlot('');
+        } catch (error) {
+            AlertUtils.closeLoading();
+            AlertUtils.showError('Error adding movie: ' + error.message);
+        }
     };
 
     const handleScreeningChange = (hallIndex, field, value) => {
@@ -150,19 +195,16 @@ export default function AddMoviesView() {
         });
     };
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        // Handle form submission here
-        console.log({ ...formData, categories: selectedCategories });
-    };
+
 
     return (
         <Layout>
             <div className="min-h-screen py-8 px-4 md:px-8">
+
                 <div className="max-w-6xl mx-auto">
                     <h1 className="text-3xl font-bold mb-8">Add New Movie</h1>
 
-                    <form onSubmit={handleSubmit} className="space-y-8">
+                    <form onSubmit={handleFormSubmit} className="space-y-8">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             {/* Left Column - Poster Preview */}
                             <div className="space-y-6">
@@ -258,8 +300,8 @@ export default function AddMoviesView() {
                                                     <div className="flex items-center justify-between">
                                                         <h3 className="text-lg font-medium">Selección de Sala</h3>
                                                         <select
-                                                            value={screening.hall}
-                                                            onChange={(e) => handleScreeningChange(hallIndex, 'hall', e.target.value)}
+                                                            value={screening.sala}
+                                                            onChange={(e) => handleScreeningChange(hallIndex, 'sala', e.target.value)}
                                                             className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                                                         >
                                                             <option value="">Seleccionar Sala</option>
@@ -271,7 +313,7 @@ export default function AddMoviesView() {
                                                         </select>
                                                     </div>
 
-                                                    {screening.hall && (
+                                                    {screening.sala && (
                                                         <div className="space-y-4">
                                                             <div>
                                                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Select Days</h4>

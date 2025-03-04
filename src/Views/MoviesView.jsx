@@ -1,43 +1,47 @@
 import Layout from "./Layout";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from "react-router-dom";
+import movieService from "../Services/MovieService";
+import AlertUtils from "../Utils/AlertUtils";
 export default function MoviesView() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState('all');
+    const [movies, setMovies] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Sample movie data - in a real app, this would come from an API
-    const movies = [
-        {
-            id: 1,
-            title: "Inception",
-            director: "Christopher Nolan",
-            duration: "2h 28min",
-            status: "Now Showing",
-            showTimes: ["10:00 AM", "2:30 PM", "6:00 PM", "9:30 PM"],
-            hall: "Hall A",
-            poster: "https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_.jpg"
-        },
-        {
-            id: 2,
-            title: "The Dark Knight",
-            director: "Christopher Nolan",
-            duration: "2h 32min",
-            status: "Now Showing",
-            showTimes: ["11:00 AM", "3:30 PM", "7:00 PM", "10:30 PM"],
-            hall: "Hall B",
-            poster: "https://m.media-amazon.com/images/M/MV5BMTMxNTMwODM0NF5BMl5BanBnXkFtZTcwODAyMTk2Mw@@._V1_.jpg"
-        },
-        {
-            id: 3,
-            title: "Dune: Part Two",
-            director: "Denis Villeneuve",
-            duration: "2h 46min",
-            status: "Now Showing",
-            showTimes: ["11:30 AM", "3:00 PM", "6:30 PM", "10:00 PM"],
-            hall: "Hall C",
-            poster: "https://m.media-amazon.com/images/M/MV5BODI0YjNhNjUtYjM0My00MTUwLWFlYTMtMWI2NGUzYjNjNGQzXkEyXkFqcGdeQXVyMDM2NDM2MQ@@._V1_.jpg"
+    useEffect(() => {
+        const initAll = async() => {
+            await fetchMovies();
         }
-    ];
+        initAll();
+    }, [])
+
+    const fetchMovies = async () => {
+        try {
+            AlertUtils.showLoading('Loading movies...');
+            const moviesData = await movieService.GetAllMovies();
+            const formattedMovies = moviesData.map(movie => ({
+                id: movie.id,
+                title: movie.title,
+                duration: movie.duration,
+                status: 'Now Showing', // You might want to add this field to your database
+                showTimes: movie.screenings && movie.screenings[0]?.timeSlots || [],
+                sala: movie.screenings && movie.screenings[0]?.sala || '',
+                days: movie.screenings && movie.screenings[0]?.days || [],
+                poster: movie.poster_url,
+                categories: typeof movie.categories === 'string' ? JSON.parse(movie.categories || '[]') : movie.categories,
+                trailerYouTubeId: movie.trailer_youtube_id
+            }));
+            setMovies(formattedMovies);
+            AlertUtils.closeLoading();
+        } catch (error) {
+            console.error('Error fetching movies:', error);
+            AlertUtils.showError('Failed to load movies');
+        }
+        setIsLoading(false);
+    }
+
+    // Remove the hardcoded movies array
 
     const filteredMovies = movies.filter(movie => {
         const matchesSearch = movie.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -82,7 +86,16 @@ export default function MoviesView() {
 
                 {/* Movies Grid */}
                 <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {!isLoading && filteredMovies.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                            <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h18M3 16h18" />
+                            </svg>
+                            <h3 className="text-lg font-medium text-gray-900 mb-1">No movies found</h3>
+                            <p className="text-gray-500">Try adjusting your search or add a new movie.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {filteredMovies.map(movie => (
                             <div key={movie.id} className="group rounded-xl overflow-hidden transform hover:scale-[1.01] transition-all duration-300 shadow-md hover:shadow-lg border-0 h-full flex flex-col bg-gray-50">
                                 <div className="relative aspect-[2/3]">
@@ -114,7 +127,7 @@ export default function MoviesView() {
                                             <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                             </svg>
-                                            <span className="text-gray-700">{movie.hall}</span>
+                                            <span className="text-gray-700">{movie.sala}</span>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
@@ -130,6 +143,40 @@ export default function MoviesView() {
                                             ))}
                                         </div>
                                     </div>
+
+                                    {/* Days Section */}
+                                    {movie.days && movie.days.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Days</h4>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {movie.days.map((day, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs text-gray-700"
+                                                    >
+                                                        {day}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Categories Section */}
+                                    {movie.categories && movie.categories.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Categories</h4>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {movie.categories.map((category, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className="px-2 py-1 bg-gray-100 rounded-full text-xs text-gray-700 border border-gray-200"
+                                                    >
+                                                        {category}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                     <button className="w-full py-2 mt-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-white hover:text-black border-2 border-black transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2">
                                         Edit Movie
                                     </button>
@@ -137,6 +184,7 @@ export default function MoviesView() {
                             </div>
                         ))}
                     </div>
+                    )}
                 </div>
             </div>
         </Layout>

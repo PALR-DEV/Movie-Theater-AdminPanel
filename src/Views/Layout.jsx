@@ -1,12 +1,24 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import authService from '../Services/AuthService'
 
 const Layout = ({ children }) => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const location = useLocation()
 
+    const navigate = useNavigate()
+
     const toggleSidebar = () => {
         setIsSidebarOpen(!isSidebarOpen)
+    }
+
+    const handleLogout = async () => {
+        try {
+            await authService.Logout()
+            navigate('/login')
+        } catch (error) {
+            console.error('Logout failed:', error)
+        }
     }
 
     const isActivePath = (path) => {
@@ -101,7 +113,7 @@ const Layout = ({ children }) => {
                     <div className="mt-auto">
                         <div className="h-px bg-gray-200 -mx-4 mb-4"></div>
                         <button
-                            onClick={() => console.log('Logout clicked')}
+                            onClick={handleLogout}
                             className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm md:text-base hover:bg-red-50 active:bg-red-100 transition-colors text-red-600 hover:text-red-700"
                         >
                             <svg
