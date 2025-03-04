@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import authService from '../Services/AuthService'
 
 const LoginView = () => {
     const [formData, setFormData] = useState({
@@ -10,6 +11,11 @@ const LoginView = () => {
         e.preventDefault()
         // Handle login logic here
         console.log('Login attempt:', formData)
+        authService.Login(formData.email, formData.password).then((data) => {
+            console.log(data)
+        }).catch((error) => {
+            console.log(error)
+        })
     }
 
     const handleChange = (e) => {
