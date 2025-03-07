@@ -1,8 +1,6 @@
 import { supabase } from "../Config/supabase";
-import { Movie } from "../Models/Movie";
 
 class MovieService {
-
     async GetAllMovies() {
         const { data, error } = await supabase
             .from('Movies')
@@ -27,7 +25,6 @@ class MovieService {
         return data;
     }
 
-
     async addMovie(movieData) {
         const { data, error } = await supabase
             .from('Movies')
@@ -36,8 +33,11 @@ class MovieService {
                 trailer_youtube_id: movieData.trailerYouTubeId,
                 duration: movieData.duration,
                 poster_url: movieData.posterUrl,
-                categories: movieData.categories, // Array of strings
-                screenings: movieData.screenings // Array of objects
+                categories: movieData.categories,
+                screenings: movieData.screenings.map(screening => ({
+                    sala: screening.sala,
+                    timeSlotsByDay: screening.timeSlotsByDay || {}
+                }))
             }])
             .select();
         
@@ -48,18 +48,19 @@ class MovieService {
     }
     
     async updateMovie(movieId, movieData) {
-    
         const updateData = {
             title: movieData.title,
             trailer_youtube_id: movieData.trailerYouTubeId,
             duration: movieData.duration,
             poster_url: movieData.posterUrl,
             categories: movieData.categories,
-            screenings: movieData.screenings
+            screenings: movieData.screenings.map(screening => ({
+                sala: screening.sala,
+                timeSlotsByDay: screening.timeSlotsByDay || {}
+            }))
         };
         
         try {
-            // Perform the update and get updated data immediately
             const { data: updatedData, error: updateError } = await supabase
                 .from('Movies')
                 .update(updateData)
@@ -72,19 +73,29 @@ class MovieService {
             }
             
             const updatedMovie = updatedData[0];
-
-            if (updateError) throw updateError;
-            if (!updatedData) throw new Error('No data returned from update');
-
-            // Parse the JSON strings back to arrays
             return {
-                ...updatedData,
-                categories: updatedData.categories || [],
-                screenings: updatedData.screenings || []
+                ...updatedMovie,
+                categories: updatedMovie.categories || [],
+                screenings: updatedMovie.screenings.map(screening => ({
+                    sala: screening.sala,
+                    timeSlotsByDay: screening.timeSlotsByDay || {}
+                })) || []
             };
 
         } catch (error) {
             console.error("Update failed:", error);
+            throw error;
+        }
+    }
+
+    async deleteMovie(movieID) {
+        try {
+            const {data, error} = await supabase.from('Movies').delete().eq('id', movieID);
+            if(error) {
+                throw error;
+            }
+            return data;
+        } catch (error) {
             throw error;
         }
     }

@@ -24,10 +24,11 @@ export default function MoviesView() {
                 id: movie.id,
                 title: movie.title,
                 duration: movie.duration,
-                status: 'Now Showing', // You might want to add this field to your database
-                showTimes: movie.screenings && movie.screenings[0]?.timeSlots || [],
-                sala: movie.screenings && movie.screenings[0]?.sala || '',
-                days: movie.screenings && movie.screenings[0]?.days || [],
+                status: 'Now Showing',
+                screenings: movie.screenings?.map(screening => ({
+                    sala: screening.sala,
+                    timeSlotsByDay: screening.timeSlotsByDay || {}
+                })) || [],
                 poster: movie.poster_url,
                 categories: typeof movie.categories === 'string' ? JSON.parse(movie.categories || '[]') : movie.categories,
                 trailerYouTubeId: movie.trailer_youtube_id
@@ -131,15 +132,29 @@ export default function MoviesView() {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Show Times</h4>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {movie.showTimes.map((time, index) => (
-                                                <span
-                                                    key={index}
-                                                    className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 hover:bg-black hover:text-white hover:border-black transition-all duration-200 cursor-pointer"
-                                                >
-                                                    {time}
-                                                </span>
+                                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Screenings</h4>
+                                        <div className="space-y-2">
+                                            {movie.screenings.map((screening, screeningIndex) => (
+                                                <div key={screeningIndex} className="space-y-1">
+                                                    <p className="text-sm font-medium text-gray-700">Sala {screening.sala}</p>
+                                                    {Object.entries(screening.timeSlotsByDay || {}).map(([day, times]) => (
+                                                        times.length > 0 && (
+                                                            <div key={day} className="flex flex-wrap items-center gap-2">
+                                                                <span className="text-xs font-medium text-gray-500">{day}:</span>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {times.map((time, timeIndex) => (
+                                                                        <span
+                                                                            key={timeIndex}
+                                                                            className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs text-gray-700"
+                                                                        >
+                                                                            {time}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    ))}
+                                                </div>
                                             ))}
                                         </div>
                                     </div>

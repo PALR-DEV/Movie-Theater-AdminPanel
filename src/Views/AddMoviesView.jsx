@@ -14,7 +14,7 @@ export default function AddMoviesView() {
         screenings: Array(5).fill().map(() => ({
             sala: '',
             days: [],
-            timeSlots: []
+            timeSlotsByDay: {}
         }))
     });
 
@@ -29,7 +29,7 @@ export default function AddMoviesView() {
         return `${hour12}:${minutes} ${ampm}`;
     };
 
-    const handleAddTimeSlot = (hallIndex) => {
+    const handleAddTimeSlot = (hallIndex, day) => {
         if (!newTimeSlot) return;
         
         const formattedTime = convertTo12HourFormat(newTimeSlot);
@@ -37,8 +37,15 @@ export default function AddMoviesView() {
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
-                if (index === hallIndex && !screening.timeSlots.includes(formattedTime)) {
-                    return { ...screening, timeSlots: [...screening.timeSlots, formattedTime] };
+                if (index === hallIndex) {
+                    const newTimeSlots = [...(screening.timeSlotsByDay[day] || []), formattedTime];
+                    return {
+                        ...screening,
+                        timeSlotsByDay: {
+                            ...screening.timeSlotsByDay,
+                            [day]: [...new Set(newTimeSlots)]
+                        }
+                    };
                 }
                 return screening;
             })
@@ -63,7 +70,8 @@ export default function AddMoviesView() {
 
         // Validate at least one screening is set up
         const hasValidScreening = formData.screenings.some(screening => 
-            screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
+            screening.sala && screening.days.length > 0 && 
+            Object.values(screening.timeSlotsByDay).some(slots => slots.length > 0)
         );
 
         if (!hasValidScreening) {
@@ -75,10 +83,17 @@ export default function AddMoviesView() {
         const finalFormData = {
             ...formData,
             categories: selectedCategories,
-            // Filter out empty screenings
-            screenings: formData.screenings.filter(screening => 
-                screening.sala && screening.days.length > 0 && screening.timeSlots.length > 0
-            )
+            screenings: formData.screenings
+                .filter(screening => 
+                    screening.sala && 
+                    screening.days.length > 0 &&
+                    Object.values(screening.timeSlotsByDay).some(slots => slots.length > 0)
+                )
+                .map(screening => ({
+                    sala: screening.sala,
+                    days: screening.days,
+                    timeSlotsByDay: screening.timeSlotsByDay
+                }))
         };
         
         try {
@@ -336,42 +351,56 @@ export default function AddMoviesView() {
                                                             <div>
                                                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Add Time Slots</h4>
                                                                 <div className="space-y-4">
-                                                                    <div className="flex gap-2">
-                                                                        <input
-                                                                            type="time"
-                                                                            value={newTimeSlot}
-                                                                            onChange={(e) => setNewTimeSlot(e.target.value)}
-                                                                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                                                                        />
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleAddTimeSlot(hallIndex)}
-                                                                            className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors duration-200"
-                                                                        >
-                                                                            Add Time
-                                                                        </button>
-                                                                    </div>
-                                                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                                                        {screening.timeSlots.map(timeSlot => (
-                                                                            <button
-                                                                                key={timeSlot}
-                                                                                type="button"
-                                                                                onClick={() => toggleTimeSlot(hallIndex, timeSlot)}
-                                                                                className="px-4 py-2 rounded-lg text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors duration-200"
-                                                                            >
-                                                                                {timeSlot}
-                                                                                <span 
-                                                                                    className="ml-2 text-lg hover:text-red-500"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        toggleTimeSlot(hallIndex, timeSlot);
-                                                                                    }}
+                                                                    {screening.days.map(day => (
+                                                                        <div key={day} className="space-y-4 p-4 bg-gray-100 rounded-lg mb-4">
+                                                                            <h4 className="font-medium text-gray-700">{day}</h4>
+                                                                            <div className="flex gap-2">
+                                                                                <input
+                                                                                    type="time"
+                                                                                    value={newTimeSlot}
+                                                                                    onChange={(e) => setNewTimeSlot(e.target.value)}
+                                                                                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                                                />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleAddTimeSlot(hallIndex, day)}
+                                                                                    className="px-4 py-2 bg-black text-white rounded-lg"
                                                                                 >
-                                                                                    ×
-                                                                                </span>
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
+                                                                                    Add Time
+                                                                                </button>
+                                                                            </div>
+                                                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                                                {(screening.timeSlotsByDay[day] || []).map(timeSlot => (
+                                                                                    <button
+                                                                                        key={timeSlot}
+                                                                                        type="button"
+                                                                                        onClick={() => {
+                                                                                            setFormData(prev => ({
+                                                                                                ...prev,
+                                                                                                screenings: prev.screenings.map((s, i) => {
+                                                                                                    if (i === hallIndex) {
+                                                                                                        const filtered = s.timeSlotsByDay[day].filter(t => t !== timeSlot);
+                                                                                                        return {
+                                                                                                            ...s,
+                                                                                                            timeSlotsByDay: {
+                                                                                                                ...s.timeSlotsByDay,
+                                                                                                                [day]: filtered
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }
+                                                                                                    return s;
+                                                                                                })
+                                                                                            }));
+                                                                                        }}
+                                                                                        className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+                                                                                    >
+                                                                                        {timeSlot}
+                                                                                        <span className="ml-2">×</span>
+                                                                                    </button>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
                                                             </div>
                                                         </div>
