@@ -68,14 +68,21 @@ export default function AddMoviesView() {
             return;
         }
 
-        // Validate at least one screening is set up
-        const hasValidScreening = formData.screenings.some(screening => 
-            screening.sala && screening.days.length > 0 && 
-            Object.values(screening.timeSlotsByDay).some(slots => slots.length > 0)
-        );
+        // Validate at least one screening is set up with time slots
+        const hasValidScreening = formData.screenings.some(screening => {
+            if (!screening.sala || screening.days.length === 0) return false;
+            
+            // Check if there's at least one time slot for any selected day
+            const hasTimeSlots = screening.days.some(day => 
+                screening.timeSlotsByDay[day] && 
+                screening.timeSlotsByDay[day].length > 0
+            );
+            
+            return hasTimeSlots;
+        });
 
         if (!hasValidScreening) {
-            AlertUtils.showError('Please set up at least one screening with hall, days, and time slots');
+            AlertUtils.showError('Please set up at least one screening with hall, selected days, and at least one time slot for each selected day');
             return;
         }
 
