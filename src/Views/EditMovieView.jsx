@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from './Layout';
 import movieService from '../Services/MovieService';
 import AlertUtils from '../Utils/AlertUtils';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import '../assets/datepicker-custom.css';
 
 export default function EditMovieView() {
     const { id } = useParams();
@@ -16,8 +19,8 @@ export default function EditMovieView() {
         categories: [],
         screenings: Array(5).fill().map(() => ({
             sala: '',
-            days: [],
-            timeSlotsByDay: {}
+            selectedDates: [],
+            timeSlotsByDate: {}
         }))
     });
 
@@ -34,15 +37,28 @@ export default function EditMovieView() {
                 AlertUtils.showLoading('Loading movie data...');
                 const movieData = await movieService.GetMovieById(id);
 
-                // Format screenings data to include timeSlotsByDay
-                const formattedScreenings = movieData.screenings?.map(screening => ({
-                    sala: screening.sala,
-                    days: screening.days || [],
-                    timeSlotsByDay: screening.timeSlotsByDay || {}
-                })) || Array(5).fill().map(() => ({
+                // Format screenings data to include selectedDates
+                const formattedScreenings = movieData.screenings?.map(screening => {
+                    // Convert dates to Date objects for the selectedDates array
+                    const selectedDates = Object.keys(screening.timeSlotsByDate || {}).map(dateStr => {
+                        try {
+                            // Parse the date string to create a valid Date object
+                            return new Date(dateStr);
+                        } catch (error) {
+                            console.error('Error parsing date:', dateStr, error);
+                            return null;
+                        }
+                    }).filter(date => date !== null && !isNaN(date.getTime())); // Filter out any invalid dates
+                    
+                    return {
+                        sala: screening.sala,
+                        selectedDates: selectedDates,
+                        timeSlotsByDate: screening.timeSlotsByDate || {}
+                    };
+                }) || Array(5).fill().map(() => ({
                     sala: '',
-                    days: [],
-                    timeSlotsByDay: {}
+                    selectedDates: [],
+                    timeSlotsByDate: {}
                 }));
 
                 setFormData({
@@ -88,14 +104,15 @@ export default function EditMovieView() {
         return `${hour12}:${minutes} ${ampm}`;
     };
 
-    const handleAddTimeSlot = (hallIndex, day) => {
+    const handleAddTimeSlot = (hallIndex, date) => {
         if (!newTimeSlot) return;
-        
+
         const formattedTime = convertTo12HourFormat(newTimeSlot);
-        
+        const dateKey = date.toDateString(); // Use date string as key
+
         setFormData(prev => {
-            // Check if this time slot already exists for this day
-            const existingTimeSlots = prev.screenings[hallIndex]?.timeSlotsByDay[day] || [];
+            // Check if this time slot already exists for this date
+            const existingTimeSlots = prev.screenings[hallIndex]?.timeSlotsByDate[dateKey] || [];
             if (existingTimeSlots.includes(formattedTime)) {
                 AlertUtils.showError('This time slot already exists');
                 return prev; // Don't update if duplicate
@@ -105,12 +122,12 @@ export default function EditMovieView() {
                 ...prev,
                 screenings: prev.screenings.map((screening, index) => {
                     if (index === hallIndex) {
-                        const newTimeSlots = [...(screening.timeSlotsByDay[day] || []), formattedTime];
+                        const newTimeSlots = [...(screening.timeSlotsByDate[dateKey] || []), formattedTime];
                         return {
                             ...screening,
-                            timeSlotsByDay: {
-                                ...screening.timeSlotsByDay,
-                                [day]: [...new Set(newTimeSlots)].sort()
+                            timeSlotsByDate: {
+                                ...screening.timeSlotsByDate,
+                                [dateKey]: [...new Set(newTimeSlots)].sort()
                             }
                         };
                     }
@@ -141,13 +158,13 @@ export default function EditMovieView() {
                 screenings: formData.screenings
                     .filter(screening => 
                         screening.sala && 
-                        screening.days.length > 0 &&
-                        Object.values(screening.timeSlotsByDay).some(slots => slots.length > 0)
+                        screening.selectedDates.length > 0 &&
+                        Object.values(screening.timeSlotsByDate).some(slots => slots.length > 0)
                     )
                     .map(screening => ({
                         sala: screening.sala,
-                        days: screening.days,
-                        timeSlotsByDay: screening.timeSlotsByDay
+                        selectedDates: screening.selectedDates.map(date => date.toISOString()), // Convert dates to ISO string
+                        timeSlotsByDate: screening.timeSlotsByDate
                     }))
             };
             const updatedMovie = await movieService.updateMovie(id, finalFormData);
@@ -162,9 +179,8 @@ export default function EditMovieView() {
             });
             setSelectedCategories(updatedMovie.categories);
 
-            AlertUtils.showSuccess('Movie updated successfully!');
-            // Force a refresh before navigation
-            await new Promise(resolve => setTimeout(resolve, 500));
+            AlertUtils.showSuccess('Movie updated successfully!');            
+            // Remove the Promise with setTimeout and navigate immediately
             navigate('/movies');
         } catch (error) {
             console.error('Update error:', error);
@@ -185,34 +201,54 @@ export default function EditMovieView() {
         }));
     };
 
-    const toggleDay = (hallIndex, day) => {
+    const handleDateChange = (hallIndex, date) => {
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
                 if (index === hallIndex) {
-                    const days = screening.days.includes(day)
-                        ? screening.days.filter(d => d !== day)
-                        : [...screening.days, day];
-                    return { ...screening, days };
+                    // Check if the date already exists in selectedDates
+                    const dateExists = screening.selectedDates.some(
+                        selectedDate => selectedDate.toDateString() === date.toDateString()
+                    );
+
+                    // If date exists, remove it (deselect). If not, add it (select)
+                    const updatedDates = dateExists
+                        ? screening.selectedDates.filter(
+                            selectedDate => selectedDate.toDateString() !== date.toDateString()
+                        )
+                        : [...screening.selectedDates, date];
+
+                    // If we're removing a date, also remove its time slots
+                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
+                    if (dateExists) {
+                        delete updatedTimeSlotsByDate[date.toDateString()];
+                    }
+
+                    return { 
+                        ...screening, 
+                        selectedDates: updatedDates,
+                        timeSlotsByDate: updatedTimeSlotsByDate
+                    };
                 }
                 return screening;
             })
         }));
     };
 
-    const toggleTimeSlot = (hallIndex, day, timeSlot) => {
+    const toggleTimeSlot = (hallIndex, date, timeSlot) => {
         setFormData(prev => {
             // We're only removing time slots with this function now
             const updatedScreenings = prev.screenings.map((screening, index) => {
                 if (index === hallIndex) {
-                    const currentTimeSlots = screening.timeSlotsByDay[day] || [];
+                    const dateKey = date.toDateString();
+                    const currentTimeSlots = screening.timeSlotsByDate[dateKey] || [];
                     const updatedTimeSlots = currentTimeSlots.filter(t => t !== timeSlot);
                     
                     return {
                         ...screening,
-                        timeSlotsByDay: {
-                            ...screening.timeSlotsByDay,
-                            [day]: updatedTimeSlots
+                        timeSlotsByDate: {
+                            ...screening.timeSlotsByDate,
+                            [dateKey]: updatedTimeSlots
                         }
                     };
                 }
@@ -225,6 +261,7 @@ export default function EditMovieView() {
             };
         });
     };
+
 
     // Sample categories - in a real app, this would come from an API
     const availableCategories = [
@@ -417,76 +454,81 @@ export default function EditMovieView() {
                                                 {screening.sala && (
                                                     <div className="space-y-4">
                                                         <div>
-                                                            <h4 className="text-sm font-medium text-gray-700 mb-2">Select Days</h4>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {availableDays.map(day => (
-                                                                    <button
-                                                                        key={day}
-                                                                        type="button"
-                                                                        onClick={() => toggleDay(hallIndex, day)}
-                                                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                                                                            screening.days.includes(day)
-                                                                                ? 'bg-black text-white shadow-md'
-                                                                                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                                                                        }`}
-                                                                    >
-                                                                        {day}
-                                                                    </button>
-                                                                ))}
+                                                            <h4 className="text-sm font-medium text-gray-700 mb-2">Select Dates</h4>
+                                                            <div className="mb-4">
+                                                                <DatePicker
+                                                                    onChange={(date) => handleDateChange(hallIndex, date)}
+                                                                    selectsRange={false}
+                                                                    inline
+                                                                    monthsShown={1}
+                                                                    minDate={new Date()}
+                                                                    highlightDates={screening.selectedDates}
+                                                                    selected={null} // Set to null to allow selecting multiple dates
+                                                                    className="border border-gray-300 rounded-lg shadow-md"
+                                                                    dayClassName={date => {
+                                                                        // Check if the date is in selectedDates
+                                                                        return screening.selectedDates.some(selectedDate => 
+                                                                            selectedDate.toDateString() === date.toDateString()
+                                                                        ) ? 'react-datepicker__day--highlighted' : undefined;
+                                                                    }}
+                                                                />
                                                             </div>
                                                         </div>
                                                         
-                                                        {screening.days.length === 0 && (
+                                                        {screening.selectedDates.length === 0 && (
                                                             <div className="p-4 bg-gray-100 rounded-lg text-center">
-                                                                <p className="text-sm text-gray-500">Please select at least one day to add screening times</p>
+                                                                <p className="text-sm text-gray-500">Please select at least one date to add screening times</p>
                                                             </div>
                                                         )}
 
-                                                        {screening.days.map(day => (
-                                                            <div key={day} className="space-y-2 p-3 bg-gray-100 rounded-lg">
-                                                                <h4 className="text-sm font-medium text-gray-700 flex items-center justify-between">
-                                                                    <span>{day}</span>
-                                                                    <span className="text-xs text-gray-500">{(screening.timeSlotsByDay[day] || []).length} time slots</span>
-                                                                </h4>
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <input
-                                                                        type="time"
-                                                                        value={newTimeSlot}
-                                                                        onChange={(e) => setNewTimeSlot(e.target.value)}
-                                                                        className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent shadow-sm"
-                                                                    />
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleAddTimeSlot(hallIndex, day)}
-                                                                        className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors duration-200 shadow-sm flex-shrink-0"
-                                                                        disabled={!newTimeSlot}
-                                                                    >
-                                                                        Add Time
-                                                                    </button>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {(screening.timeSlotsByDay[day] || []).sort().map(timeSlot => (
-                                                                        <div
-                                                                            key={`${day}-${timeSlot}`}
-                                                                            className="px-4 py-2 rounded-lg text-sm font-medium bg-black text-white flex items-center gap-2 shadow-sm"
+                                                        {screening.selectedDates.map(date => {
+                                                            const dateKey = date.toDateString();
+                                                            return (
+                                                                <div key={dateKey} className="space-y-2 p-3 bg-gray-100 rounded-lg">
+                                                                    <h4 className="text-sm font-medium text-gray-700 flex items-center justify-between">
+                                                                        <span>{dateKey}</span>
+                                                                        <span className="text-xs text-gray-500">{(screening.timeSlotsByDate[dateKey] || []).length} time slots</span>
+                                                                    </h4>
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <input
+                                                                            type="time"
+                                                                            value={newTimeSlot}
+                                                                            onChange={(e) => setNewTimeSlot(e.target.value)}
+                                                                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent shadow-sm"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleAddTimeSlot(hallIndex, date)}
+                                                                            className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors duration-200 shadow-sm flex-shrink-0"
+                                                                            disabled={!newTimeSlot}
                                                                         >
-                                                                            <span>{timeSlot}</span>
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => toggleTimeSlot(hallIndex, day, timeSlot)}
-                                                                                className="text-white hover:text-red-400 transition-colors duration-200"
-                                                                                aria-label="Remove time slot"
+                                                                            Add Time
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {(screening.timeSlotsByDate[dateKey] || []).sort().map(timeSlot => (
+                                                                            <div
+                                                                                key={`${dateKey}-${timeSlot}`}
+                                                                                className="px-4 py-2 rounded-lg text-sm font-medium bg-black text-white flex items-center gap-2 shadow-sm"
                                                                             >
-                                                                                ×
-                                                                            </button>
-                                                                        </div>
-                                                                    ))}
-                                                                    {(screening.timeSlotsByDay[day] || []).length === 0 && (
-                                                                        <p className="text-sm text-gray-500 italic w-full text-center py-2">No time slots added yet</p>
-                                                                    )}
+                                                                                <span>{timeSlot}</span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => toggleTimeSlot(hallIndex, date, timeSlot)}
+                                                                                    className="text-white hover:text-red-400 transition-colors duration-200"
+                                                                                    aria-label="Remove time slot"
+                                                                                >
+                                                                                    ×
+                                                                                </button>
+                                                                            </div>
+                                                                        ))}
+                                                                        {(screening.timeSlotsByDate[dateKey] || []).length === 0 && (
+                                                                            <p className="text-sm text-gray-500 italic w-full text-center py-2">No time slots added yet</p>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import Layout from './Layout';
 import movieService from '../Services/MovieService';
-import { Movie } from '../Models/Movie';
 import AlertUtils from '../Utils/AlertUtils';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import '../assets/datepicker-custom.css';
 
 export default function AddMoviesView() {
     const [formData, setFormData] = useState({
@@ -13,12 +15,11 @@ export default function AddMoviesView() {
         categories: [],
         screenings: Array(5).fill().map(() => ({
             sala: '',
-            days: [],
-            timeSlotsByDay: {}
+            selectedDates: [], // Replace 'days' with 'selectedDates'
+            timeSlotsByDate: {} // Replace 'timeSlotsByDay' with 'timeSlotsByDate'
         }))
     });
 
-    // Sample time slots - in a real app, this would come from an API
     const [newTimeSlot, setNewTimeSlot] = useState('');
 
     const convertTo12HourFormat = (time24) => {
@@ -29,21 +30,22 @@ export default function AddMoviesView() {
         return `${hour12}:${minutes} ${ampm}`;
     };
 
-    const handleAddTimeSlot = (hallIndex, day) => {
+    const handleAddTimeSlot = (hallIndex, date) => {
         if (!newTimeSlot) return;
-        
+
         const formattedTime = convertTo12HourFormat(newTimeSlot);
-        
+        const dateKey = date.toDateString(); // Use date string as key
+
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
                 if (index === hallIndex) {
-                    const newTimeSlots = [...(screening.timeSlotsByDay[day] || []), formattedTime];
+                    const newTimeSlots = [...(screening.timeSlotsByDate[dateKey] || []), formattedTime];
                     return {
                         ...screening,
-                        timeSlotsByDay: {
-                            ...screening.timeSlotsByDay,
-                            [day]: [...new Set(newTimeSlots)]
+                        timeSlotsByDate: {
+                            ...screening.timeSlotsByDate,
+                            [dateKey]: [...new Set(newTimeSlots)]
                         }
                     };
                 }
@@ -53,64 +55,47 @@ export default function AddMoviesView() {
         setNewTimeSlot('');
     };
 
-    const availableDays = [
-        'Lunes', 'Martes', 'Miércoles', 'Jueves',
-        'Viernes', 'Sábado', 'Domingo'
-    ];
-
-    const [showSuccess, setShowSuccess] = useState(false);
-    const handleFormSubmit = async(e) => {
+    const handleFormSubmit = async (e) => {
         e.preventDefault();
-        
-        // Validate required fields
+
         if (!formData.title || !formData.duration) {
             AlertUtils.showError('Please fill in all required fields');
             return;
         }
 
-        // Validate at least one screening is set up with time slots
         const hasValidScreening = formData.screenings.some(screening => {
-            if (!screening.sala || screening.days.length === 0) return false;
-            
-            // Check if there's at least one time slot for any selected day
-            const hasTimeSlots = screening.days.some(day => 
-                screening.timeSlotsByDay[day] && 
-                screening.timeSlotsByDay[day].length > 0
-            );
-            
+            if (!screening.sala || screening.selectedDates.length === 0) return false;
+            const hasTimeSlots = Object.values(screening.timeSlotsByDate).some(slots => slots.length > 0);
             return hasTimeSlots;
         });
 
         if (!hasValidScreening) {
-            AlertUtils.showError('Please set up at least one screening with hall, selected days, and at least one time slot for each selected day');
+            AlertUtils.showError('Please set up at least one screening with hall, selected dates, and time slots');
             return;
         }
 
-        // Prepare the final form data
         const finalFormData = {
             ...formData,
             categories: selectedCategories,
             screenings: formData.screenings
-                .filter(screening => 
-                    screening.sala && 
-                    screening.days.length > 0 &&
-                    Object.values(screening.timeSlotsByDay).some(slots => slots.length > 0)
+                .filter(screening =>
+                    screening.sala &&
+                    screening.selectedDates.length > 0 &&
+                    Object.values(screening.timeSlotsByDate).some(slots => slots.length > 0)
                 )
                 .map(screening => ({
                     sala: screening.sala,
-                    days: screening.days,
-                    timeSlotsByDay: screening.timeSlotsByDay
+                    selectedDates: screening.selectedDates.map(date => date.toISOString()), // Convert dates to ISO string
+                    timeSlotsByDate: screening.timeSlotsByDate
                 }))
         };
-        
+
         try {
             AlertUtils.showLoading('Adding movie...');
             await movieService.addMovie(finalFormData);
             AlertUtils.closeLoading();
-            
             AlertUtils.showSuccess('Movie added successfully!');
-            
-            // Reset form after successful submission
+
             setFormData({
                 title: '',
                 trailerYouTubeId: '',
@@ -119,11 +104,10 @@ export default function AddMoviesView() {
                 categories: [],
                 screenings: Array(5).fill().map(() => ({
                     sala: '',
-                    days: [],
-                    timeSlots: []
+                    selectedDates: [],
+                    timeSlotsByDate: {}
                 }))
             });
-    
             setSelectedCategories([]);
             setPosterPreview('');
             setNewTimeSlot('');
@@ -136,38 +120,62 @@ export default function AddMoviesView() {
     const handleScreeningChange = (hallIndex, field, value) => {
         setFormData(prev => ({
             ...prev,
-            screenings: prev.screenings.map((screening, index) => 
-                index === hallIndex
-                    ? { ...screening, [field]: value }
-                    : screening
+            screenings: prev.screenings.map((screening, index) =>
+                index === hallIndex ? { ...screening, [field]: value } : screening
             )
         }));
     };
 
-    const toggleDay = (hallIndex, day) => {
+    const handleDateChange = (hallIndex, dates) => {
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
                 if (index === hallIndex) {
-                    const days = screening.days.includes(day)
-                        ? screening.days.filter(d => d !== day)
-                        : [...screening.days, day];
-                    return { ...screening, days };
-                }
-                return screening;
-            })
-        }));
-    };
+                    // If dates is a single date (not an array), handle select/deselect
+                    if (!Array.isArray(dates)) {
+                        // Check if the date already exists in selectedDates
+                        const dateExists = screening.selectedDates.some(
+                            selectedDate => selectedDate.toDateString() === dates.toDateString()
+                        );
 
-    const toggleTimeSlot = (hallIndex, timeSlot) => {
-        setFormData(prev => ({
-            ...prev,
-            screenings: prev.screenings.map((screening, index) => {
-                if (index === hallIndex) {
-                    const timeSlots = screening.timeSlots.includes(timeSlot)
-                        ? screening.timeSlots.filter(t => t !== timeSlot)
-                        : [...screening.timeSlots, timeSlot];
-                    return { ...screening, timeSlots };
+                        // If date exists, remove it (deselect). If not, add it (select)
+                        const updatedDates = dateExists
+                            ? screening.selectedDates.filter(
+                                selectedDate => selectedDate.toDateString() !== dates.toDateString()
+                            )
+                            : [...screening.selectedDates, dates];
+
+                        // If we're removing a date, also remove its time slots
+                        const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
+                        if (dateExists) {
+                            delete updatedTimeSlotsByDate[dates.toDateString()];
+                        }
+
+                        return { 
+                            ...screening, 
+                            selectedDates: updatedDates,
+                            timeSlotsByDate: updatedTimeSlotsByDate
+                        };
+                    } else {
+                        // Handle the case when dates is an array (from selectsMultiple)
+                        // Find dates that were removed
+                        const removedDates = screening.selectedDates.filter(
+                            oldDate => !dates.some(newDate => newDate.toDateString() === oldDate.toDateString())
+                        );
+                        
+                        // Create a new timeSlotsByDate object without the removed dates
+                        const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
+                        removedDates.forEach(date => {
+                            const dateKey = date.toDateString();
+                            delete updatedTimeSlotsByDate[dateKey];
+                        });
+                        
+                        return { 
+                            ...screening, 
+                            selectedDates: dates,
+                            timeSlotsByDate: updatedTimeSlotsByDate
+                        };
+                    }
                 }
                 return screening;
             })
@@ -177,7 +185,6 @@ export default function AddMoviesView() {
     const [selectedCategories, setSelectedCategories] = useState([]);
     const [posterPreview, setPosterPreview] = useState('');
 
-    // Sample categories - in a real app, this would come from an API
     const availableCategories = [
         'Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
         'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror',
@@ -209,20 +216,14 @@ export default function AddMoviesView() {
     };
 
     const toggleCategory = (category) => {
-        setSelectedCategories(prev => {
-            if (prev.includes(category)) {
-                return prev.filter(c => c !== category);
-            }
-            return [...prev, category];
-        });
+        setSelectedCategories(prev =>
+            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+        );
     };
-
-
 
     return (
         <Layout>
             <div className="min-h-screen py-8 px-4 md:px-8">
-
                 <div className="max-w-6xl mx-auto">
                     <h1 className="text-3xl font-bold mb-8">Add New Movie</h1>
 
@@ -256,7 +257,6 @@ export default function AddMoviesView() {
                                         </label>
                                     </div>
                                 </div>
-
                                 <div className="space-y-4">
                                     <label className="block">
                                         <span className="text-sm font-medium text-gray-700">Poster URL</span>
@@ -287,7 +287,6 @@ export default function AddMoviesView() {
                                             placeholder="Enter movie title"
                                         />
                                     </label>
-
                                     <label className="block">
                                         <span className="text-sm font-medium text-gray-700">YouTube Trailer ID</span>
                                         <input
@@ -299,7 +298,6 @@ export default function AddMoviesView() {
                                             placeholder="e.g. dQw4w9WgXcQ"
                                         />
                                     </label>
-
                                     <label className="block">
                                         <span className="text-sm font-medium text-gray-700">Duration</span>
                                         <input
@@ -338,29 +336,55 @@ export default function AddMoviesView() {
                                                     {screening.sala && (
                                                         <div className="space-y-4">
                                                             <div>
-                                                                <h4 className="text-sm font-medium text-gray-700 mb-2">Select Days</h4>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {availableDays.map(day => (
-                                                                        <button
-                                                                            key={day}
-                                                                            type="button"
-                                                                            onClick={() => toggleDay(hallIndex, day)}
-                                                                            className={`px-4 py-2 rounded-lg text-sm font-medium  ${screening.days.includes(day)
-                                                                                ? 'bg-black text-white'
-                                                                                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
-                                                                        >
-                                                                            {day}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
+                                                                <h4 className="text-sm font-medium text-gray-700 mb-2">Select Dates</h4>
+                                                                <DatePicker
+                                                                    selected={screening.selectedDates[0] || null}
+                                                                    onChange={(dates) => handleDateChange(hallIndex, dates)}
+                                                                    selectsMultiple
+                                                                    inline
+                                                                    highlightDates={screening.selectedDates}
+                                                                    className="w-full border border-gray-300 rounded-lg shadow-md"
+                                                                    dayClassName={date => {
+                                                                        // Check if the date is in selectedDates
+                                                                        return screening.selectedDates.some(selectedDate => 
+                                                                            selectedDate.toDateString() === date.toDateString()
+                                                                        ) ? 'react-datepicker__day--highlighted' : undefined;
+                                                                    }}
+                                                                />
+                                                                
+                                                                {/* Display selected dates with remove buttons */}
+                                                                {screening.selectedDates.length > 0 && (
+                                                                    <div className="mt-4">
+                                                                        <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Dates:</h5>
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            {screening.selectedDates.map((date, dateIndex) => (
+                                                                                <div key={dateIndex} className="flex items-center bg-gray-100 rounded-lg px-3 py-1">
+                                                                                    <span className="text-sm">
+                                                                                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => {
+                                                                                            const newDates = screening.selectedDates.filter((_, idx) => idx !== dateIndex);
+                                                                                            handleDateChange(hallIndex, newDates);
+                                                                                        }}
+                                                                                        className="ml-2 text-gray-500 hover:text-red-500"
+                                                                                    >
+                                                                                        <span>×</span>
+                                                                                    </button>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             <div>
                                                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Add Time Slots</h4>
                                                                 <div className="space-y-4">
-                                                                    {screening.days.map(day => (
-                                                                        <div key={day} className="space-y-4 p-4 bg-gray-100 rounded-lg mb-4">
-                                                                            <h4 className="font-medium text-gray-700">{day}</h4>
+                                                                    {screening.selectedDates.map(date => (
+                                                                        <div key={date.toDateString()} className="space-y-4 p-4 bg-gray-100 rounded-lg mb-4">
+                                                                            <h4 className="font-medium text-gray-700">{date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}</h4>
                                                                             <div className="flex gap-2">
                                                                                 <input
                                                                                     type="time"
@@ -370,14 +394,14 @@ export default function AddMoviesView() {
                                                                                 />
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() => handleAddTimeSlot(hallIndex, day)}
+                                                                                    onClick={() => handleAddTimeSlot(hallIndex, date)}
                                                                                     className="px-4 py-2 bg-black text-white rounded-lg"
                                                                                 >
                                                                                     Add Time
                                                                                 </button>
                                                                             </div>
                                                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                                                                {(screening.timeSlotsByDay[day] || []).map(timeSlot => (
+                                                                                {(screening.timeSlotsByDate[date.toDateString()] || []).map(timeSlot => (
                                                                                     <button
                                                                                         key={timeSlot}
                                                                                         type="button"
@@ -386,14 +410,14 @@ export default function AddMoviesView() {
                                                                                                 ...prev,
                                                                                                 screenings: prev.screenings.map((s, i) => {
                                                                                                     if (i === hallIndex) {
-                                                                                                        const filtered = s.timeSlotsByDay[day].filter(t => t !== timeSlot);
+                                                                                                        const filtered = s.timeSlotsByDate[date.toDateString()].filter(t => t !== timeSlot);
                                                                                                         return {
                                                                                                             ...s,
-                                                                                                            timeSlotsByDay: {
-                                                                                                                ...s.timeSlotsByDay,
-                                                                                                                [day]: filtered
+                                                                                                            timeSlotsByDate: {
+                                                                                                                ...s.timeSlotsByDate,
+                                                                                                                [date.toDateString()]: filtered
                                                                                                             }
-                                                                                                        }
+                                                                                                        };
                                                                                                     }
                                                                                                     return s;
                                                                                                 })

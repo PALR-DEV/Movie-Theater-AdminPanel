@@ -102,11 +102,11 @@ const Layout = ({ children }) => {
                         </li>
                         <li>
                             <Link
-                                to="/prices"
-                                className={`flex items-center rounded-lg px-4 py-3 hover:bg-gray-100 active:bg-gray-200 transition-colors ${isActivePath('/prices') ? 'bg-gray-100' : ''}`}
+                                to="/settings"
+                                className={`flex items-center rounded-lg px-4 py-3 hover:bg-gray-100 active:bg-gray-200 transition-colors ${isActivePath('/settings') ? 'bg-gray-100' : ''}`}
                                 onClick={() => setIsSidebarOpen(false)}
                             >
-                                <span className="text-sm md:text-base">Prices</span>
+                                <span className="text-sm md:text-base">Settings</span>
                             </Link>
                         </li>
                     </ul>

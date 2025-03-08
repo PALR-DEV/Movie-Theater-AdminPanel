@@ -20,19 +20,36 @@ export default function MoviesView() {
         try {
             AlertUtils.showLoading('Loading movies...');
             const moviesData = await movieService.GetAllMovies();
-            const formattedMovies = moviesData.map(movie => ({
-                id: movie.id,
-                title: movie.title,
-                duration: movie.duration,
-                status: 'Now Showing',
-                screenings: movie.screenings?.map(screening => ({
-                    sala: screening.sala,
-                    timeSlotsByDay: screening.timeSlotsByDay || {}
-                })) || [],
-                poster: movie.poster_url,
-                categories: typeof movie.categories === 'string' ? JSON.parse(movie.categories || '[]') : movie.categories,
-                trailerYouTubeId: movie.trailer_youtube_id
-            }));
+            const formattedMovies = moviesData.map(movie => {
+                // Convert time_slots format to timeSlotsByDate for UI display
+                const formattedScreenings = movie.screenings?.map(screening => {
+                    const timeSlotsByDate = {};
+                    
+                    if (screening.time_slots && Array.isArray(screening.time_slots)) {
+                        screening.time_slots.forEach(slot => {
+                            if (slot.date && Array.isArray(slot.times)) {
+                                timeSlotsByDate[slot.date] = slot.times;
+                            }
+                        });
+                    }
+                    
+                    return {
+                        sala: screening.sala,
+                        timeSlotsByDate: timeSlotsByDate
+                    };
+                }) || [];
+                
+                return {
+                    id: movie.id,
+                    title: movie.title,
+                    duration: movie.duration,
+                    status: 'Now Showing',
+                    screenings: formattedScreenings,
+                    poster: movie.poster_url,
+                    categories: typeof movie.categories === 'string' ? JSON.parse(movie.categories || '[]') : movie.categories,
+                    trailerYouTubeId: movie.trailer_youtube_id
+                };
+            });
             setMovies(formattedMovies);
             AlertUtils.closeLoading();
         } catch (error) {
@@ -137,10 +154,10 @@ export default function MoviesView() {
                                             {movie.screenings.map((screening, screeningIndex) => (
                                                 <div key={screeningIndex} className="space-y-1">
                                                     <p className="text-sm font-medium text-gray-700">Sala {screening.sala}</p>
-                                                    {Object.entries(screening.timeSlotsByDay || {}).map(([day, times]) => (
+                                                    {Object.entries(screening.timeSlotsByDate || {}).map(([date, times]) => (
                                                         times.length > 0 && (
-                                                            <div key={day} className="flex flex-wrap items-center gap-2">
-                                                                <span className="text-xs font-medium text-gray-500">{day}:</span>
+                                                            <div key={date} className="flex flex-wrap items-center gap-2">
+                                                                <span className="text-xs font-medium text-gray-500">{date}:</span>
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {times.map((time, timeIndex) => (
                                                                         <span
