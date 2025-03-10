@@ -262,6 +262,62 @@ export default function EditMovieView() {
         });
     };
 
+    const handleRemoveTimeSlot = (hallIndex, date, timeSlot) => {
+        setFormData(prev => ({
+            ...prev,
+            screenings: prev.screenings.map((screening, index) => {
+                if (index === hallIndex) {
+                    const dateKey = date.toDateString();
+                    const currentTimeSlots = screening.timeSlotsByDate[dateKey] || [];
+                    const updatedTimeSlots = currentTimeSlots.filter(slot => slot !== timeSlot);
+                    
+                    // If no time slots remain, remove the date entirely
+                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
+                    if (updatedTimeSlots.length === 0) {
+                        delete updatedTimeSlotsByDate[dateKey];
+                        return {
+                            ...screening,
+                            selectedDates: screening.selectedDates.filter(
+                                selectedDate => selectedDate.toDateString() !== dateKey
+                            ),
+                            timeSlotsByDate: updatedTimeSlotsByDate
+                        };
+                    }
+                    
+                    return {
+                        ...screening,
+                        timeSlotsByDate: {
+                            ...screening.timeSlotsByDate,
+                            [dateKey]: updatedTimeSlots
+                        }
+                    };
+                }
+                return screening;
+            })
+        }));
+    };
+
+    const handleRemoveDate = (hallIndex, date) => {
+        setFormData(prev => ({
+            ...prev,
+            screenings: prev.screenings.map((screening, index) => {
+                if (index === hallIndex) {
+                    const dateKey = date.toDateString();
+                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
+                    delete updatedTimeSlotsByDate[dateKey];
+                    
+                    return {
+                        ...screening,
+                        selectedDates: screening.selectedDates.filter(
+                            selectedDate => selectedDate.toDateString() !== dateKey
+                        ),
+                        timeSlotsByDate: updatedTimeSlotsByDate
+                    };
+                }
+                return screening;
+            })
+        }));
+    };
 
     // Sample categories - in a real app, this would come from an API
     const availableCategories = [

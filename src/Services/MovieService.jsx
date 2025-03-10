@@ -84,14 +84,23 @@ class MovieService {
 
     async updateMovie(movieId, movieData) {
         // Transform the screenings data to match the new structure with time_slots
-        const formattedScreenings = movieData.screenings.map(screening => ({
-            sala: screening.sala,
-            time_slots: Object.entries(screening.timeSlotsByDate || {}).map(([date, timeSlots]) => ({
-                date: date, // Store the date string
-                times: timeSlots // Array of time slots for that date
-            }))
-        }));
-        
+        const formattedScreenings = movieData.screenings
+            .map(screening => {
+                // Filter out empty time slots and dates
+                const validTimeSlots = Object.entries(screening.timeSlotsByDate || {})
+                    .filter(([_, timeSlots]) => timeSlots && Array.isArray(timeSlots) && timeSlots.length > 0)
+                    .map(([date, timeSlots]) => ({
+                        date: date,
+                        times: timeSlots
+                    }));
+
+                return validTimeSlots.length > 0 ? {
+                    sala: screening.sala,
+                    time_slots: validTimeSlots
+                } : null;
+            })
+            .filter(screening => screening !== null); // Remove any screenings that have no valid time slots
+
         const updateData = {
             title: movieData.title,
             trailer_youtube_id: movieData.trailerYouTubeId,
@@ -116,23 +125,22 @@ class MovieService {
             const updatedMovie = updatedData[0];
             
             // Convert the time_slots format back to a format the UI can use
-            const formattedScreenings = updatedMovie.screenings.map(screening => {
-                // Create a timeSlotsByDay object from time_slots array
-                const timeSlotsByDay = {};
-                
-                if (screening.time_slots && Array.isArray(screening.time_slots)) {
+            const formattedScreenings = updatedMovie.screenings
+                .filter(screening => screening && screening.time_slots && screening.time_slots.length > 0)
+                .map(screening => {
+                    const timeSlotsByDay = {};
+                    
                     screening.time_slots.forEach(slot => {
-                        if (slot.date && Array.isArray(slot.times)) {
+                        if (slot.date && Array.isArray(slot.times) && slot.times.length > 0) {
                             timeSlotsByDay[slot.date] = slot.times;
                         }
                     });
-                }
-                
-                return {
-                    sala: screening.sala,
-                    timeSlotsByDay: timeSlotsByDay
-                };
-            });
+                    
+                    return {
+                        sala: screening.sala,
+                        timeSlotsByDay: timeSlotsByDay
+                    };
+                });
             
             return {
                 ...updatedMovie,
