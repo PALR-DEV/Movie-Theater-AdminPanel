@@ -33,67 +33,54 @@ export default function EditMovieView() {
 
     useEffect(() => {
         const fetchMovieData = async () => {
+            if (!id) return;
+
             try {
                 AlertUtils.showLoading('Loading movie data...');
                 const movieData = await movieService.GetMovieById(id);
 
-                // Format screenings data to include selectedDates
-                const formattedScreenings = movieData.screenings?.map(screening => {
-                    // Convert dates to Date objects for the selectedDates array
-                    const selectedDates = Object.keys(screening.timeSlotsByDate || {}).map(dateStr => {
-                        try {
-                            // Parse the date string to create a valid Date object
-                            return new Date(dateStr);
-                        } catch (error) {
-                            console.error('Error parsing date:', dateStr, error);
-                            return null;
-                        }
-                    }).filter(date => date !== null && !isNaN(date.getTime())); // Filter out any invalid dates
-                    
-                    return {
-                        sala: screening.sala,
-                        selectedDates: selectedDates,
-                        timeSlotsByDate: screening.timeSlotsByDate || {}
-                    };
-                }) || Array(5).fill().map(() => ({
+                const formattedScreenings = movieData.screenings?.map(screening => ({
+                    sala: screening.sala,
+                    selectedDates: Object.keys(screening.timeSlotsByDate || {})
+                        .map(dateStr => {
+                            const date = new Date(dateStr);
+                            return isNaN(date.getTime()) ? null : date;
+                        })
+                        .filter(Boolean),
+                    timeSlotsByDate: screening.timeSlotsByDate || {}
+                })) || Array(5).fill().map(() => ({
                     sala: '',
                     selectedDates: [],
                     timeSlotsByDate: {}
                 }));
+
+                const categories = Array.isArray(movieData.categories)
+                    ? movieData.categories
+                    : JSON.parse(movieData.categories || '[]');
 
                 setFormData({
                     title: movieData.title || '',
                     trailerYouTubeId: movieData.trailer_youtube_id || '',
                     duration: movieData.duration || '',
                     posterUrl: movieData.poster_url || '',
-                    categories: movieData.categories || [],
+                    categories,
                     screenings: formattedScreenings
                 });
 
-                // Set categories
-                const categories = typeof movieData.categories === 'string'
-                    ? JSON.parse(movieData.categories || '[]')
-                    : movieData.categories || [];
                 setSelectedCategories(categories);
+                setPosterPreview(movieData.poster_url || '');
 
-                // Set poster preview
-                if (movieData.poster_url) {
-                    setPosterPreview(movieData.poster_url);
-                }
-
-                AlertUtils.closeLoading();
             } catch (error) {
                 console.error('Error fetching movie:', error);
                 AlertUtils.showError('Failed to load movie data');
                 navigate('/movies');
             } finally {
                 setIsLoading(false);
+                AlertUtils.closeLoading();
             }
         };
 
-        if (id) {
-            fetchMovieData();
-        }
+        fetchMovieData();
     }, [id, navigate]);
 
     const convertTo12HourFormat = (time24) => {
@@ -106,33 +93,28 @@ export default function EditMovieView() {
 
     const handleAddTimeSlot = (hallIndex, date) => {
         if (!newTimeSlot) return;
-
+    
         const formattedTime = convertTo12HourFormat(newTimeSlot);
-        const dateKey = date.toDateString(); // Use date string as key
-
+        const dateKey = date.toDateString();
+    
         setFormData(prev => {
-            // Check if this time slot already exists for this date
             const existingTimeSlots = prev.screenings[hallIndex]?.timeSlotsByDate[dateKey] || [];
             if (existingTimeSlots.includes(formattedTime)) {
                 AlertUtils.showError('This time slot already exists');
-                return prev; // Don't update if duplicate
+                return prev;
             }
             
             return {
                 ...prev,
-                screenings: prev.screenings.map((screening, index) => {
-                    if (index === hallIndex) {
-                        const newTimeSlots = [...(screening.timeSlotsByDate[dateKey] || []), formattedTime];
-                        return {
-                            ...screening,
-                            timeSlotsByDate: {
-                                ...screening.timeSlotsByDate,
-                                [dateKey]: [...new Set(newTimeSlots)].sort()
-                            }
-                        };
-                    }
-                    return screening;
-                })
+                screenings: prev.screenings.map((screening, index) => 
+                    index === hallIndex ? {
+                        ...screening,
+                        timeSlotsByDate: {
+                            ...screening.timeSlotsByDate,
+                            [dateKey]: [...new Set([...existingTimeSlots, formattedTime])].sort()
+                        }
+                    } : screening
+                )
             };
         });
         setNewTimeSlot('');
@@ -163,12 +145,12 @@ export default function EditMovieView() {
                     )
                     .map(screening => ({
                         sala: screening.sala,
-                        selectedDates: screening.selectedDates.map(date => date.toISOString()), // Convert dates to ISO string
+                        selectedDates: screening.selectedDates.map(date => date.toISOString()),
                         timeSlotsByDate: screening.timeSlotsByDate
                     }))
             };
+
             const updatedMovie = await movieService.updateMovie(id, finalFormData);
-            // Update local state with fresh data
             setFormData({
                 title: updatedMovie.title,
                 trailerYouTubeId: updatedMovie.trailer_youtube_id,
@@ -179,8 +161,7 @@ export default function EditMovieView() {
             });
             setSelectedCategories(updatedMovie.categories);
 
-            AlertUtils.showSuccess('Movie updated successfully!');            
-            // Remove the Promise with setTimeout and navigate immediately
+            AlertUtils.showSuccess('Movie updated successfully!');
             navigate('/movies');
         } catch (error) {
             console.error('Update error:', error);
@@ -205,32 +186,29 @@ export default function EditMovieView() {
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
-                if (index === hallIndex) {
-                    // Check if the date already exists in selectedDates
-                    const dateExists = screening.selectedDates.some(
-                        selectedDate => selectedDate.toDateString() === date.toDateString()
-                    );
+                if (index !== hallIndex) return screening;
 
-                    // If date exists, remove it (deselect). If not, add it (select)
-                    const updatedDates = dateExists
-                        ? screening.selectedDates.filter(
-                            selectedDate => selectedDate.toDateString() !== date.toDateString()
-                        )
-                        : [...screening.selectedDates, date];
+                const dateStr = date.toDateString();
+                const dateExists = screening.selectedDates.some(
+                    selectedDate => selectedDate.toDateString() === dateStr
+                );
 
-                    // If we're removing a date, also remove its time slots
-                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
-                    if (dateExists) {
-                        delete updatedTimeSlotsByDate[date.toDateString()];
-                    }
+                const updatedDates = dateExists
+                    ? screening.selectedDates.filter(
+                        selectedDate => selectedDate.toDateString() !== dateStr
+                    )
+                    : [...screening.selectedDates, date];
 
-                    return { 
-                        ...screening, 
-                        selectedDates: updatedDates,
-                        timeSlotsByDate: updatedTimeSlotsByDate
-                    };
+                const updatedTimeSlots = { ...screening.timeSlotsByDate };
+                if (dateExists) {
+                    delete updatedTimeSlots[dateStr];
                 }
-                return screening;
+
+                return {
+                    ...screening,
+                    selectedDates: updatedDates,
+                    timeSlotsByDate: updatedTimeSlots
+                };
             })
         }));
     };
