@@ -211,8 +211,8 @@ export default function MoviesView() {
                                     )}
                                     <Link 
                                         to={`/movies/edit/${movie.id}`}
-                                        className="block w-full py-2 mt-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-white hover:text-black border-2 border-black transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 text-center"
-                                    >
+                                        className="block w-full py-2 mt-auto bg-black text-white rounded-lg text-sm font-medium hover:bg-white hover:text-black border-2 border-black transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 text-center"
+                                        >
                                         Edit Movie
                                     </Link>
                                 </div>

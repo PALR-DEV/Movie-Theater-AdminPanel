@@ -110,6 +110,16 @@ const Layout = ({ children }) => {
                                 <span className="text-sm md:text-base">Employees</span>
                             </Link>
                         </li>
+                        {/* <li>
+                            <Link
+                                to="/transactions"
+                                className={`flex items-center rounded-lg px-4 py-3 hover:bg-gray-100 active:bg-gray-200 transition-colors ${isActivePath('/transactions') ? 'bg-gray-100' : ''}`}
+                                onClick={() => setIsSidebarOpen(false)}
+                            >
+                                <span className="text-sm md:text-base">Transactions</span>
+                            </Link>
+                        </li> */}
+
                         <li>
                             <Link
                                 to="/settings"
