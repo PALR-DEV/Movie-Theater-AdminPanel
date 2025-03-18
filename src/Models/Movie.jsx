@@ -5,9 +5,9 @@ export const Movie = {
     duration: '',
     posterUrl: '',
     categories: [],
-    screenings: Array(5).fill().map(() => ({
+    screening: {
         sala: '',
-        days: [],
+        date: '',
         timeSlots: []
-    }))
+    }
 };

@@ -23,41 +23,32 @@ export default function EditMovieView() {
             timeSlotsByDate: {}
         }))
     });
-
-
     const [newTimeSlot, setNewTimeSlot] = useState('');
     const [selectedCategories, setSelectedCategories] = useState([]);
     const [posterPreview, setPosterPreview] = useState('');
 
-
-
     useEffect(() => {
         const fetchMovieData = async () => {
             if (!id) return;
-
             try {
                 AlertUtils.showLoading('Loading movie data...');
                 const movieData = await movieService.GetMovieById(id);
-
                 const formattedScreenings = movieData.screenings?.map(screening => ({
                     sala: screening.sala,
                     selectedDates: Object.keys(screening.timeSlotsByDate || {})
-                        .map(dateStr => {
-                            const date = new Date(dateStr);
-                            return isNaN(date.getTime()) ? null : date;
-                        })
-                        .filter(Boolean),
+                        .map(dateStr => new Date(dateStr))
+                        .filter(d => !isNaN(d.getTime())),
                     timeSlotsByDate: screening.timeSlotsByDate || {}
                 })) || Array(5).fill().map(() => ({
                     sala: '',
                     selectedDates: [],
                     timeSlotsByDate: {}
                 }));
-
+                
                 const categories = Array.isArray(movieData.categories)
                     ? movieData.categories
                     : JSON.parse(movieData.categories || '[]');
-
+                    
                 setFormData({
                     title: movieData.title || '',
                     trailerYouTubeId: movieData.trailer_youtube_id || '',
@@ -66,10 +57,8 @@ export default function EditMovieView() {
                     categories,
                     screenings: formattedScreenings
                 });
-
                 setSelectedCategories(categories);
                 setPosterPreview(movieData.poster_url || '');
-
             } catch (error) {
                 console.error('Error fetching movie:', error);
                 AlertUtils.showError('Failed to load movie data');
@@ -79,11 +68,11 @@ export default function EditMovieView() {
                 AlertUtils.closeLoading();
             }
         };
-
         fetchMovieData();
     }, [id, navigate]);
 
     const convertTo12HourFormat = (time24) => {
+        if (!time24) return '';
         const [hours, minutes] = time24.split(':');
         const hour = parseInt(hours);
         const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -93,12 +82,13 @@ export default function EditMovieView() {
 
     const handleAddTimeSlot = (hallIndex, date) => {
         if (!newTimeSlot) return;
-    
+        
         const formattedTime = convertTo12HourFormat(newTimeSlot);
         const dateKey = date.toDateString();
-    
+        
         setFormData(prev => {
             const existingTimeSlots = prev.screenings[hallIndex]?.timeSlotsByDate[dateKey] || [];
+            
             if (existingTimeSlots.includes(formattedTime)) {
                 AlertUtils.showError('This time slot already exists');
                 return prev;
@@ -111,26 +101,21 @@ export default function EditMovieView() {
                         ...screening,
                         timeSlotsByDate: {
                             ...screening.timeSlotsByDate,
-                            [dateKey]: [...new Set([...existingTimeSlots, formattedTime])].sort()
+                            [dateKey]: [...existingTimeSlots, formattedTime].sort()
                         }
                     } : screening
                 )
             };
         });
+        
         setNewTimeSlot('');
     };
 
-    const availableDays = [
-        'Lunes', 'Martes', 'Miércoles', 'Jueves',
-        'Viernes', 'Sábado', 'Domingo'
-    ];
-
     const handleFormSubmit = async (e) => {
         e.preventDefault();
-
         try {
             AlertUtils.showLoading('Updating movie...');
-
+            
             const finalFormData = {
                 title: formData.title.trim(),
                 trailerYouTubeId: formData.trailerYouTubeId || '',
@@ -149,9 +134,10 @@ export default function EditMovieView() {
                         timeSlotsByDate: screening.timeSlotsByDate
                     }))
             };
-
+            
             const updatedMovie = await movieService.updateMovie(id, finalFormData);
             setFormData({
+                ...formData,
                 title: updatedMovie.title,
                 trailerYouTubeId: updatedMovie.trailer_youtube_id,
                 duration: updatedMovie.duration,
@@ -160,7 +146,6 @@ export default function EditMovieView() {
                 screenings: updatedMovie.screenings
             });
             setSelectedCategories(updatedMovie.categories);
-
             AlertUtils.showSuccess('Movie updated successfully!');
             navigate('/movies');
         } catch (error) {
@@ -187,76 +172,28 @@ export default function EditMovieView() {
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
                 if (index !== hallIndex) return screening;
-
-                // When receiving an array of dates (from selectsMultiple)
-                if (Array.isArray(dates)) {
-                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
-                    
-                    // Remove time slots for dates that are no longer selected
-                    screening.selectedDates.forEach(oldDate => {
-                        if (!dates.some(newDate => newDate.toDateString() === oldDate.toDateString())) {
-                            delete updatedTimeSlotsByDate[oldDate.toDateString()];
-                        }
-                    });
-
-                    return {
-                        ...screening,
-                        selectedDates: dates,
-                        timeSlotsByDate: updatedTimeSlotsByDate
-                    };
-                }
                 
-                // When receiving a single date (from manual removal)
-                const dateStr = dates.toDateString();
-                const dateExists = screening.selectedDates.some(
-                    selectedDate => selectedDate.toDateString() === dateStr
-                );
-
-                const updatedDates = dateExists
-                    ? screening.selectedDates.filter(
-                        selectedDate => selectedDate.toDateString() !== dateStr
-                    )
-                    : [...screening.selectedDates, dates];
-
+                const newDates = Array.isArray(dates) ? dates : [dates];
+                const uniqueDates = Array.from(new Set(newDates.map(d => d.toDateString())))
+                    .map(str => new Date(str))
+                    .sort((a, b) => a.getTime() - b.getTime());
+                
                 const updatedTimeSlots = { ...screening.timeSlotsByDate };
-                if (dateExists) {
-                    delete updatedTimeSlots[dateStr];
-                }
-
+                const existingDates = new Set(uniqueDates.map(d => d.toDateString()));
+                
+                Object.keys(updatedTimeSlots).forEach(dateStr => {
+                    if (!existingDates.has(dateStr)) {
+                        delete updatedTimeSlots[dateStr];
+                    }
+                });
+                
                 return {
                     ...screening,
-                    selectedDates: updatedDates,
+                    selectedDates: uniqueDates,
                     timeSlotsByDate: updatedTimeSlots
                 };
             })
         }));
-    };
-
-    const toggleTimeSlot = (hallIndex, date, timeSlot) => {
-        setFormData(prev => {
-            // We're only removing time slots with this function now
-            const updatedScreenings = prev.screenings.map((screening, index) => {
-                if (index === hallIndex) {
-                    const dateKey = date.toDateString();
-                    const currentTimeSlots = screening.timeSlotsByDate[dateKey] || [];
-                    const updatedTimeSlots = currentTimeSlots.filter(t => t !== timeSlot);
-                    
-                    return {
-                        ...screening,
-                        timeSlotsByDate: {
-                            ...screening.timeSlotsByDate,
-                            [dateKey]: updatedTimeSlots
-                        }
-                    };
-                }
-                return screening;
-            });
-            
-            return {
-                ...prev,
-                screenings: updatedScreenings
-            };
-        });
     };
 
     const handleRemoveTimeSlot = (hallIndex, date, timeSlot) => {
@@ -268,25 +205,16 @@ export default function EditMovieView() {
                     const currentTimeSlots = screening.timeSlotsByDate[dateKey] || [];
                     const updatedTimeSlots = currentTimeSlots.filter(slot => slot !== timeSlot);
                     
-                    // If no time slots remain, remove the date entirely
                     const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
                     if (updatedTimeSlots.length === 0) {
                         delete updatedTimeSlotsByDate[dateKey];
-                        return {
-                            ...screening,
-                            selectedDates: screening.selectedDates.filter(
-                                selectedDate => selectedDate.toDateString() !== dateKey
-                            ),
-                            timeSlotsByDate: updatedTimeSlotsByDate
-                        };
+                    } else {
+                        updatedTimeSlotsByDate[dateKey] = updatedTimeSlots;
                     }
                     
                     return {
                         ...screening,
-                        timeSlotsByDate: {
-                            ...screening.timeSlotsByDate,
-                            [dateKey]: updatedTimeSlots
-                        }
+                        timeSlotsByDate: updatedTimeSlotsByDate
                     };
                 }
                 return screening;
@@ -300,15 +228,15 @@ export default function EditMovieView() {
             screenings: prev.screenings.map((screening, index) => {
                 if (index === hallIndex) {
                     const dateKey = date.toDateString();
-                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
-                    delete updatedTimeSlotsByDate[dateKey];
+                    const updatedTimeSlots = { ...screening.timeSlotsByDate };
+                    delete updatedTimeSlots[dateKey];
                     
                     return {
                         ...screening,
                         selectedDates: screening.selectedDates.filter(
-                            selectedDate => selectedDate.toDateString() !== dateKey
+                            d => d.toDateString() !== dateKey
                         ),
-                        timeSlotsByDate: updatedTimeSlotsByDate
+                        timeSlotsByDate: updatedTimeSlots
                     };
                 }
                 return screening;
@@ -316,20 +244,12 @@ export default function EditMovieView() {
         }));
     };
 
-    // Sample categories - in a real app, this would come from an API
-    const availableCategories = [
-        'Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
-        'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror',
-        'Mystery', 'Romance', 'Sci-Fi', 'Thriller'
-    ];
-
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
             [name]: value
         }));
-
         if (name === 'posterUrl' && value) {
             setPosterPreview(value);
         }
@@ -373,7 +293,6 @@ export default function EditMovieView() {
                             Back to Movies
                         </button>
                     </div>
-
                     <form onSubmit={handleFormSubmit} className="space-y-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             {/* Left Column - Poster Preview */}
@@ -404,7 +323,6 @@ export default function EditMovieView() {
                                         </label>
                                     </div>
                                 </div>
-
                                 <div className="space-y-4">
                                     <label className="block">
                                         <span className="text-sm font-medium text-gray-700">Poster URL</span>
@@ -419,7 +337,6 @@ export default function EditMovieView() {
                                     </label>
                                 </div>
                             </div>
-
                             {/* Right Column - Movie Details */}
                             <div className="space-y-6">
                                 <div className="space-y-4">
@@ -435,7 +352,6 @@ export default function EditMovieView() {
                                             placeholder="Enter movie title"
                                         />
                                     </label>
-
                                     <label className="block">
                                         <span className="text-sm font-medium text-gray-700">YouTube Trailer ID</span>
                                         <input
@@ -447,7 +363,6 @@ export default function EditMovieView() {
                                             placeholder="e.g. dQw4w9WgXcQ"
                                         />
                                     </label>
-
                                     <label className="block">
                                         <span className="text-sm font-medium text-gray-700">Duration</span>
                                         <input
@@ -460,12 +375,13 @@ export default function EditMovieView() {
                                             placeholder="e.g. 2h 30min"
                                         />
                                     </label>
-
                                     {/* Categories Section */}
                                     <div className="space-y-2">
                                         <span className="text-sm font-medium text-gray-700">Categories</span>
                                         <div className="flex flex-wrap gap-2">
-                                            {availableCategories.map(category => (
+                                            {['Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
+                                              'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror',
+                                              'Mystery', 'Romance', 'Sci-Fi', 'Thriller'].map(category => (
                                                 <button
                                                     key={category}
                                                     type="button"
@@ -480,12 +396,11 @@ export default function EditMovieView() {
                                         </div>
                                     </div>
                                 </div>
-
                                 {/* Screening Schedule Section */}
                                 <div className="mt-8 space-y-6 bg-white p-6 rounded-xl border border-gray-200">
                                     <h2 className="text-xl font-semibold">Screening Schedule</h2>
                                     <div className="space-y-8">
-                                        {formData.screenings.slice(0, 1).map((screening, hallIndex) => (
+                                        {formData.screenings.map((screening, hallIndex) => (
                                             <div key={hallIndex} className="space-y-4 p-4 bg-gray-50 rounded-xl">
                                                 <div className="flex items-center justify-between">
                                                     <h3 className="text-lg font-medium">Selección de Sala</h3>
@@ -495,32 +410,29 @@ export default function EditMovieView() {
                                                         className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                                                     >
                                                         <option value="">Seleccionar Sala</option>
-                                                        <option value="Sala de Exposición 1">Sala de Exposición 1</option>
-                                                        <option value="Sala de Exposición 2">Sala de Exposición 2</option>
-                                                        <option value="Sala de Exposición 3">Sala de Exposición 3</option>
-                                                        <option value="Sala de Exposición 4">Sala de Exposición 4</option>
-                                                        <option value="Sala de Exposición 5">Sala de Exposición 5</option>
+                                                        {[1,2,3,4,5].map(num => (
+                                                            <option key={num} value={`Sala de Exposición ${num}`}>
+                                                                Sala de Exposición {num}
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                 </div>
-
                                                 {screening.sala && (
                                                     <div className="space-y-4">
                                                         <div>
                                                             <h4 className="text-sm font-medium text-gray-700 mb-2">Select Dates</h4>
                                                             <DatePicker
-                                                                selected={screening.selectedDates[0] || null}
                                                                 onChange={(dates) => handleDateChange(hallIndex, dates)}
                                                                 selectsMultiple
                                                                 inline
                                                                 highlightDates={screening.selectedDates}
                                                                 className="w-full border border-gray-300 rounded-lg shadow-md"
-                                                                dayClassName={date => {
-                                                                    return screening.selectedDates.some(selectedDate => 
+                                                                dayClassName={date => 
+                                                                    screening.selectedDates.some(selectedDate => 
                                                                         selectedDate.toDateString() === date.toDateString()
-                                                                    ) ? 'react-datepicker__day--highlighted' : undefined;
-                                                                }}
+                                                                    ) ? 'react-datepicker__day--highlighted' : undefined
+                                                                }
                                                             />
-                                                            
                                                             {screening.selectedDates.length > 0 && (
                                                                 <div className="mt-4">
                                                                     <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Dates:</h5>
@@ -532,13 +444,10 @@ export default function EditMovieView() {
                                                                                 </span>
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() => {
-                                                                                        const newDates = screening.selectedDates.filter((_, idx) => idx !== dateIndex);
-                                                                                        handleDateChange(hallIndex, newDates);
-                                                                                    }}
+                                                                                    onClick={() => handleRemoveDate(hallIndex, date)}
                                                                                     className="ml-2 text-gray-500 hover:text-red-500"
                                                                                 >
-                                                                                    <span>×</span>
+                                                                                    ×
                                                                                 </button>
                                                                             </div>
                                                                         ))}
@@ -546,7 +455,6 @@ export default function EditMovieView() {
                                                                 </div>
                                                             )}
                                                         </div>
-
                                                         <div>
                                                             <h4 className="text-sm font-medium text-gray-700 mb-2">Add Time Slots</h4>
                                                             <div className="space-y-4">
@@ -575,11 +483,10 @@ export default function EditMovieView() {
                                                                                 <button
                                                                                     key={timeSlot}
                                                                                     type="button"
-                                                                                    onClick={() => toggleTimeSlot(hallIndex, date, timeSlot)}
+                                                                                    onClick={() => handleRemoveTimeSlot(hallIndex, date, timeSlot)}
                                                                                     className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
                                                                                 >
-                                                                                    {timeSlot}
-                                                                                    <span className="ml-2">×</span>
+                                                                                    {timeSlot} ×
                                                                                 </button>
                                                                             ))}
                                                                         </div>
@@ -593,8 +500,7 @@ export default function EditMovieView() {
                                         ))}
                                     </div>
                                 </div>
-
-                                {/* YouTube Trailer Preview - Moved below schedule section */}
+                                {/* YouTube Trailer Preview */}
                                 {formData.trailerYouTubeId && (
                                     <div className="aspect-video w-full rounded-xl overflow-hidden bg-gray-100 shadow-md mt-8">
                                         <iframe
@@ -608,7 +514,6 @@ export default function EditMovieView() {
                                         ></iframe>
                                     </div>
                                 )}
-
                                 <div className="flex flex-col gap-4 pt-4">
                                     <div className="flex justify-end gap-4">
                                         <button
@@ -633,7 +538,6 @@ export default function EditMovieView() {
                                                     'Delete Movie', 
                                                     'Are you sure you want to delete this movie? This action cannot be undone.'
                                                 );
-                                                
                                                 if (result.isConfirmed) {
                                                     try {
                                                         await movieService.deleteMovie(id);

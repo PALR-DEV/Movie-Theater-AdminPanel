@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from './Layout';
 import movieService from '../Services/MovieService';
 import AlertUtils from '../Utils/AlertUtils';
@@ -6,190 +7,163 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import '../assets/datepicker-custom.css';
 
-export default function AddMoviesView() {
+export default function AddMovieView() {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         title: '',
         trailerYouTubeId: '',
         duration: '',
         posterUrl: '',
         categories: [],
-        screenings: Array(5).fill().map(() => ({
+        screenings: [{
             sala: '',
-            selectedDates: [], // Replace 'days' with 'selectedDates'
-            timeSlotsByDate: {} // Replace 'timeSlotsByDay' with 'timeSlotsByDate'
-        }))
+            selectedDates: [],
+            timeSlotsByDate: {}
+        }]
     });
-
     const [newTimeSlot, setNewTimeSlot] = useState('');
+    const [selectedCategories, setSelectedCategories] = useState([]);
+    const [posterPreview, setPosterPreview] = useState('');
 
     const convertTo12HourFormat = (time24) => {
-        const [hours, minutes] = time24.split(':');
-        const hour = parseInt(hours);
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const hour12 = hour % 12 || 12;
-        return `${hour12}:${minutes} ${ampm}`;
+        if (!time24) return '';
+        try {
+            const [hours, minutes] = time24.split(':');
+            if (!hours || !minutes) return '';
+
+            const hour = parseInt(hours);
+            if (isNaN(hour)) return '';
+
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${minutes} ${ampm}`;
+        } catch (error) {
+            console.error('Error converting time format:', error);
+            return '';
+        }
     };
 
     const handleAddTimeSlot = (hallIndex, date) => {
         if (!newTimeSlot) return;
+        if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+            AlertUtils.showError('Invalid date selected');
+            return;
+        }
 
         const formattedTime = convertTo12HourFormat(newTimeSlot);
-        const dateKey = date.toDateString(); // Use date string as key
+        const dateKey = date.toDateString();
 
-        setFormData(prev => ({
-            ...prev,
-            screenings: prev.screenings.map((screening, index) => {
-                if (index === hallIndex) {
-                    const newTimeSlots = [...(screening.timeSlotsByDate[dateKey] || []), formattedTime];
-                    return {
+        setFormData(prev => {
+            const existingTimeSlots = prev.screenings[hallIndex]?.timeSlotsByDate[dateKey] || [];
+
+            if (existingTimeSlots.includes(formattedTime)) {
+                AlertUtils.showError('This time slot already exists');
+                return prev;
+            }
+
+            return {
+                ...prev,
+                screenings: prev.screenings.map((screening, index) =>
+                    index === hallIndex ? {
                         ...screening,
                         timeSlotsByDate: {
                             ...screening.timeSlotsByDate,
-                            [dateKey]: [...new Set(newTimeSlots)]
+                            [dateKey]: [...existingTimeSlots, formattedTime].sort()
                         }
-                    };
-                }
-                return screening;
-            })
-        }));
-        setNewTimeSlot('');
-    };
-
-    const handleFormSubmit = async (e) => {
-        e.preventDefault();
-
-        if (!formData.title || !formData.duration) {
-            AlertUtils.showError('Please fill in all required fields');
-            return;
-        }
-
-        const hasValidScreening = formData.screenings.some(screening => {
-            if (!screening.sala || screening.selectedDates.length === 0) return false;
-            const hasTimeSlots = Object.values(screening.timeSlotsByDate).some(slots => slots.length > 0);
-            return hasTimeSlots;
+                    } : screening
+                )
+            };
         });
 
-        if (!hasValidScreening) {
-            AlertUtils.showError('Please set up at least one screening with hall, selected dates, and time slots');
-            return;
-        }
-
-        const finalFormData = {
-            ...formData,
-            categories: selectedCategories,
-            screenings: formData.screenings
-                .filter(screening =>
-                    screening.sala &&
-                    screening.selectedDates.length > 0 &&
-                    Object.values(screening.timeSlotsByDate).some(slots => slots.length > 0)
-                )
-                .map(screening => ({
-                    sala: screening.sala,
-                    selectedDates: screening.selectedDates.map(date => date.toISOString()), // Convert dates to ISO string
-                    timeSlotsByDate: screening.timeSlotsByDate
-                }))
-        };
-
-        try {
-            AlertUtils.showLoading('Adding movie...');
-            await movieService.addMovie(finalFormData);
-            AlertUtils.closeLoading();
-            AlertUtils.showSuccess('Movie added successfully!');
-
-            setFormData({
-                title: '',
-                trailerYouTubeId: '',
-                duration: '',
-                posterUrl: '',
-                categories: [],
-                screenings: Array(5).fill().map(() => ({
-                    sala: '',
-                    selectedDates: [],
-                    timeSlotsByDate: {}
-                }))
-            });
-            setSelectedCategories([]);
-            setPosterPreview('');
-            setNewTimeSlot('');
-        } catch (error) {
-            AlertUtils.closeLoading();
-            AlertUtils.showError('Error adding movie: ' + error.message);
-        }
+        setNewTimeSlot('');
     };
 
     const handleScreeningChange = (hallIndex, field, value) => {
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) =>
-                index === hallIndex ? { ...screening, [field]: value } : screening
+                index === hallIndex
+                    ? { ...screening, [field]: value }
+                    : screening
             )
         }));
     };
 
-    const handleDateChange = (hallIndex, dates) => {
+    const handleDateChange = (hallIndex, date) => {
+        setFormData(prev => {
+            if (!date || !(date instanceof Date) || isNaN(date.getTime()) || date < new Date()) {
+                return prev; // Skip invalid or past dates
+            }
+
+            return {
+                ...prev,
+                screenings: prev.screenings.map((screening, index) => {
+                    if (index !== hallIndex) return screening;
+
+                    const dateKey = date.toDateString();
+                    const currentDates = screening.selectedDates;
+
+                    // Add new date only if it doesn't exist
+                    if (!currentDates.some(d => d.toDateString() === dateKey)) {
+                        return {
+                            ...screening,
+                            selectedDates: [...currentDates, date].sort((a, b) => a.getTime() - b.getTime()),
+                            timeSlotsByDate: { ...screening.timeSlotsByDate }
+                        };
+                    }
+                    return screening; // No change if date already exists
+                })
+            };
+        });
+    };
+
+    const handleRemoveTimeSlot = (hallIndex, date, timeSlot) => {
         setFormData(prev => ({
             ...prev,
             screenings: prev.screenings.map((screening, index) => {
                 if (index === hallIndex) {
-                    // If dates is a single date (not an array), handle select/deselect
-                    if (!Array.isArray(dates)) {
-                        // Check if the date already exists in selectedDates
-                        const dateExists = screening.selectedDates.some(
-                            selectedDate => selectedDate.toDateString() === dates.toDateString()
-                        );
+                    const dateKey = date.toDateString();
+                    const currentTimeSlots = screening.timeSlotsByDate[dateKey] || [];
+                    const updatedTimeSlots = currentTimeSlots.filter(slot => slot !== timeSlot);
+                    const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
 
-                        // If date exists, remove it (deselect). If not, add it (select)
-                        const updatedDates = dateExists
-                            ? screening.selectedDates.filter(
-                                selectedDate => selectedDate.toDateString() !== dates.toDateString()
-                            )
-                            : [...screening.selectedDates, dates];
-
-                        // If we're removing a date, also remove its time slots
-                        const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
-                        if (dateExists) {
-                            delete updatedTimeSlotsByDate[dates.toDateString()];
-                        }
-
-                        return { 
-                            ...screening, 
-                            selectedDates: updatedDates,
-                            timeSlotsByDate: updatedTimeSlotsByDate
-                        };
+                    if (updatedTimeSlots.length === 0) {
+                        delete updatedTimeSlotsByDate[dateKey];
                     } else {
-                        // Handle the case when dates is an array (from selectsMultiple)
-                        // Find dates that were removed
-                        const removedDates = screening.selectedDates.filter(
-                            oldDate => !dates.some(newDate => newDate.toDateString() === oldDate.toDateString())
-                        );
-                        
-                        // Create a new timeSlotsByDate object without the removed dates
-                        const updatedTimeSlotsByDate = { ...screening.timeSlotsByDate };
-                        removedDates.forEach(date => {
-                            const dateKey = date.toDateString();
-                            delete updatedTimeSlotsByDate[dateKey];
-                        });
-                        
-                        return { 
-                            ...screening, 
-                            selectedDates: dates,
-                            timeSlotsByDate: updatedTimeSlotsByDate
-                        };
+                        updatedTimeSlotsByDate[dateKey] = updatedTimeSlots;
                     }
+
+                    return {
+                        ...screening,
+                        timeSlotsByDate: updatedTimeSlotsByDate
+                    };
                 }
                 return screening;
             })
         }));
     };
 
-    const [selectedCategories, setSelectedCategories] = useState([]);
-    const [posterPreview, setPosterPreview] = useState('');
+    const handleRemoveDate = (hallIndex, date) => {
+        setFormData(prev => ({
+            ...prev,
+            screenings: prev.screenings.map((screening, index) => {
+                if (index === hallIndex) {
+                    const dateKey = date.toDateString();
+                    const updatedTimeSlots = { ...screening.timeSlotsByDate };
+                    delete updatedTimeSlots[dateKey];
 
-    const availableCategories = [
-        'Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
-        'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror',
-        'Mystery', 'Romance', 'Sci-Fi', 'Thriller'
-    ];
+                    return {
+                        ...screening,
+                        selectedDates: screening.selectedDates.filter(
+                            d => d.toDateString() !== dateKey
+                        ),
+                        timeSlotsByDate: updatedTimeSlots
+                    };
+                }
+                return screening;
+            })
+        }));
+    };
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -216,22 +190,69 @@ export default function AddMoviesView() {
     };
 
     const toggleCategory = (category) => {
-        setSelectedCategories(prev =>
-            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-        );
+        setSelectedCategories(prev => {
+            if (prev.includes(category)) {
+                return prev.filter(c => c !== category);
+            }
+            return [...prev, category];
+        });
+    };
+
+    const handleFormSubmit = async (e) => {
+        e.preventDefault();
+
+        try {
+            AlertUtils.showLoading('Creating movie...');
+            const finalFormData = {
+                title: formData.title.trim(),
+                trailer_youtube_id: formData.trailerYouTubeId || '',
+                duration: formData.duration.trim(),
+                poster_url: formData.posterUrl || '',
+                categories: selectedCategories,
+                screenings: formData.screenings
+                    .filter(screening =>
+                        screening.sala &&
+                        screening.selectedDates.length > 0 &&
+                        Object.values(screening.timeSlotsByDate).some(slots => slots.length > 0)
+                    )
+                    .map(screening => ({
+                        sala: screening.sala,
+                        time_slots: screening.selectedDates.map(date => ({
+                            date: date.toDateString(),
+                            times: screening.timeSlotsByDate[date.toDateString()] || []
+                        }))
+                    }))
+            };
+
+            const newMovie = await movieService.addMovie(finalFormData);
+            // console.table(finalFormData);
+            AlertUtils.showSuccess('Movie created successfully!');
+            navigate('/movies');
+        } catch (error) {
+            console.error('Creation error:', error);
+            AlertUtils.showError(`Error creating movie: ${error.message}`);
+        } finally {
+            AlertUtils.closeLoading();
+        }
     };
 
     return (
         <Layout>
-            <div className="min-h-screen py-8 px-4 md:px-8">
+            <div className="min-h-screen py-8 px-4 md:px-8 bg-gray-50">
                 <div className="max-w-6xl mx-auto">
-                    <h1 className="text-3xl font-bold mb-8">Add New Movie</h1>
-
-                    <form onSubmit={handleFormSubmit} className="space-y-8">
+                    <div className="flex items-center justify-between mb-8">
+                        <h1 className="text-3xl font-bold text-gray-900">Add Movie</h1>
+                        <button
+                            onClick={() => navigate('/movies')}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
+                        >
+                            Back to Movies
+                        </button>
+                    </div>
+                    <form onSubmit={handleFormSubmit} className="space-y-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            {/* Left Column - Poster Preview */}
                             <div className="space-y-6">
-                                <div className="aspect-[2/3] w-full bg-gray-100 rounded-xl overflow-hidden relative group">
+                                <div className="aspect-[2/3] w-full bg-gray-100 rounded-xl overflow-hidden relative group shadow-md">
                                     {posterPreview ? (
                                         <img
                                             src={posterPreview}
@@ -246,8 +267,8 @@ export default function AddMoviesView() {
                                         </div>
                                     )}
                                     <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-                                        <label className="cursor-pointer bg-white text-black px-4 py-2 rounded-lg hover:bg-black hover:text-white transition-colors duration-200 border-2 border-white">
-                                            Change Poster
+                                        <label className="cursor-pointer bg-white text-black px-4 py-2 rounded-lg hover:bg-black hover:text-white transition-colors duration-200 border-2 border-white shadow-lg">
+                                            Upload Poster
                                             <input
                                                 type="file"
                                                 accept="image/*"
@@ -271,8 +292,6 @@ export default function AddMoviesView() {
                                     </label>
                                 </div>
                             </div>
-
-                            {/* Right Column - Movie Details */}
                             <div className="space-y-6">
                                 <div className="space-y-4">
                                     <label className="block">
@@ -310,159 +329,171 @@ export default function AddMoviesView() {
                                             placeholder="e.g. 2h 30min"
                                         />
                                     </label>
-
-                                    {/* Screening Schedule Section */}
-                                    <div className="mt-8 space-y-6 bg-white p-6 rounded-xl border border-gray-200">
-                                        <h2 className="text-xl font-semibold">Screening Schedule</h2>
-                                        <div className="space-y-8">
-                                            {formData.screenings.slice(0, 1).map((screening, hallIndex) => (
-                                                <div key={hallIndex} className="space-y-4 p-4 bg-gray-50 rounded-xl">
-                                                    <div className="flex items-center justify-between">
-                                                        <h3 className="text-lg font-medium">Selección de Sala</h3>
-                                                        <select
-                                                            value={screening.sala}
-                                                            onChange={(e) => handleScreeningChange(hallIndex, 'sala', e.target.value)}
-                                                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                                                        >
-                                                            <option value="">Seleccionar Sala</option>
-                                                            <option value="Sala de Exposición 1">Sala de Exposición 1</option>
-                                                            <option value="Sala de Exposición 2">Sala de Exposición 2</option>
-                                                            <option value="Sala de Exposición 3">Sala de Exposición 3</option>
-                                                            <option value="Sala de Exposición 4">Sala de Exposición 4</option>
-                                                            <option value="Sala de Exposición 5">Sala de Exposición 5</option>
-                                                        </select>
-                                                    </div>
-
-                                                    {screening.sala && (
-                                                        <div className="space-y-4">
-                                                            <div>
-                                                                <h4 className="text-sm font-medium text-gray-700 mb-2">Select Dates</h4>
-                                                                <DatePicker
-                                                                    selected={screening.selectedDates[0] || null}
-                                                                    onChange={(dates) => handleDateChange(hallIndex, dates)}
-                                                                    selectsMultiple
-                                                                    inline
-                                                                    highlightDates={screening.selectedDates}
-                                                                    className="w-full border border-gray-300 rounded-lg shadow-md"
-                                                                    dayClassName={date => {
-                                                                        // Check if the date is in selectedDates
-                                                                        return screening.selectedDates.some(selectedDate => 
-                                                                            selectedDate.toDateString() === date.toDateString()
-                                                                        ) ? 'react-datepicker__day--highlighted' : undefined;
-                                                                    }}
-                                                                />
-                                                                
-                                                                {/* Display selected dates with remove buttons */}
-                                                                {screening.selectedDates.length > 0 && (
-                                                                    <div className="mt-4">
-                                                                        <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Dates:</h5>
-                                                                        <div className="flex flex-wrap gap-2">
-                                                                            {screening.selectedDates.map((date, dateIndex) => (
-                                                                                <div key={dateIndex} className="flex items-center bg-gray-100 rounded-lg px-3 py-1">
-                                                                                    <span className="text-sm">
-                                                                                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                                                    </span>
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => {
-                                                                                            const newDates = screening.selectedDates.filter((_, idx) => idx !== dateIndex);
-                                                                                            handleDateChange(hallIndex, newDates);
-                                                                                        }}
-                                                                                        className="ml-2 text-gray-500 hover:text-red-500"
-                                                                                    >
-                                                                                        <span>×</span>
-                                                                                    </button>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-
-                                                            <div>
-                                                                <h4 className="text-sm font-medium text-gray-700 mb-2">Add Time Slots</h4>
-                                                                <div className="space-y-4">
-                                                                    {screening.selectedDates.map(date => (
-                                                                        <div key={date.toDateString()} className="space-y-4 p-4 bg-gray-100 rounded-lg mb-4">
-                                                                            <h4 className="font-medium text-gray-700">{date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}</h4>
-                                                                            <div className="flex gap-2">
-                                                                                <input
-                                                                                    type="time"
-                                                                                    value={newTimeSlot}
-                                                                                    onChange={(e) => setNewTimeSlot(e.target.value)}
-                                                                                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm"
-                                                                                />
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => handleAddTimeSlot(hallIndex, date)}
-                                                                                    className="px-4 py-2 bg-black text-white rounded-lg"
-                                                                                >
-                                                                                    Add Time
-                                                                                </button>
-                                                                            </div>
-                                                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                                                                {(screening.timeSlotsByDate[date.toDateString()] || []).map(timeSlot => (
-                                                                                    <button
-                                                                                        key={timeSlot}
-                                                                                        type="button"
-                                                                                        onClick={() => {
-                                                                                            setFormData(prev => ({
-                                                                                                ...prev,
-                                                                                                screenings: prev.screenings.map((s, i) => {
-                                                                                                    if (i === hallIndex) {
-                                                                                                        const filtered = s.timeSlotsByDate[date.toDateString()].filter(t => t !== timeSlot);
-                                                                                                        return {
-                                                                                                            ...s,
-                                                                                                            timeSlotsByDate: {
-                                                                                                                ...s.timeSlotsByDate,
-                                                                                                                [date.toDateString()]: filtered
-                                                                                                            }
-                                                                                                        };
-                                                                                                    }
-                                                                                                    return s;
-                                                                                                })
-                                                                                            }));
-                                                                                        }}
-                                                                                        className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
-                                                                                    >
-                                                                                        {timeSlot}
-                                                                                        <span className="ml-2">×</span>
-                                                                                    </button>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Categories Section */}
                                     <div className="space-y-2">
                                         <span className="text-sm font-medium text-gray-700">Categories</span>
                                         <div className="flex flex-wrap gap-2">
-                                            {availableCategories.map(category => (
-                                                <button
-                                                    key={category}
-                                                    type="button"
-                                                    onClick={() => toggleCategory(category)}
-                                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedCategories.includes(category)
-                                                        ? 'bg-black text-white'
-                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                >
-                                                    {category}
-                                                </button>
-                                            ))}
+                                            {['Action', 'Adventure', 'Animation', 'Comedy', 'Crime',
+                                                'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror',
+                                                'Mystery', 'Romance', 'Sci-Fi', 'Thriller'].map(category => (
+                                                    <button
+                                                        key={category}
+                                                        type="button"
+                                                        onClick={() => toggleCategory(category)}
+                                                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedCategories.includes(category)
+                                                            ? 'bg-black text-white shadow-md'
+                                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                    >
+                                                        {category}
+                                                    </button>
+                                                ))}
                                         </div>
                                     </div>
                                 </div>
-
+                                <div className="mt-8 space-y-6 bg-white p-6 rounded-xl border border-gray-200">
+                                    <h2 className="text-xl font-semibold">Screening Schedule</h2>
+                                    <div className="space-y-8">
+                                        {formData.screenings.map((screening, hallIndex) => (
+                                            <div key={hallIndex} className="space-y-4 p-4 bg-gray-50 rounded-xl">
+                                                <div className="flex items-center justify-between">
+                                                    <h3 className="text-lg font-medium">Screening Room</h3>
+                                                    <select
+                                                        value={screening.sala}
+                                                        onChange={(e) => handleScreeningChange(hallIndex, 'sala', e.target.value)}
+                                                        className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                                                    >
+                                                        <option value="">Select Room</option>
+                                                        {[1, 2, 3, 4, 5].map(num => (
+                                                            <option key={num} value={`Screening Room ${num}`}>
+                                                                Screening Room {num}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                {screening.sala && (
+                                                    <div className="space-y-4">
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-gray-700 mb-2">Select Dates</h4>
+                                                            <DatePicker
+                                                                onChange={(date) => handleDateChange(hallIndex, date)}
+                                                                inline
+                                                                selected={null}
+                                                                highlightDates={screening.selectedDates}
+                                                                className="w-full border border-gray-300 rounded-lg shadow-md"
+                                                                dayClassName={date =>
+                                                                    screening.selectedDates.some(selectedDate =>
+                                                                        selectedDate.toDateString() === date.toDateString()
+                                                                    ) ? 'bg-black text-white rounded-full' : undefined
+                                                                }
+                                                                minDate={new Date()}
+                                                                placeholderText="Select dates"
+                                                                dateFormat="MMMM d, yyyy"
+                                                                isClearable={false}
+                                                                shouldCloseOnSelect={false}
+                                                                calendarStartDay={1}
+                                                            />
+                                                            {screening.selectedDates.length > 0 && (
+                                                                <div className="mb-4">
+                                                                    <label className="block text-gray-700 text-sm font-bold mb-2">Screening Dates and Times</label>
+                                                                    <div className="flex flex-wrap gap-4">
+                                                                        {screening.selectedDates.map((date, dateIndex) => (
+                                                                            <div key={dateIndex} className="bg-white p-4 rounded-lg shadow-md w-64">
+                                                                                <div className="flex justify-between items-center mb-3">
+                                                                                    <span className="font-semibold">{date.toDateString()}</span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => handleRemoveDate(hallIndex, date)}
+                                                                                        className="text-red-500 hover:text-red-700"
+                                                                                    >
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                                                        </svg>
+                                                                                    </button>
+                                                                                </div>
+                                                                                <div className="space-y-2">
+                                                                                    <div className="flex gap-2">
+                                                                                        <input
+                                                                                            type="time"
+                                                                                            value={newTimeSlot}
+                                                                                            onChange={(e) => setNewTimeSlot(e.target.value)}
+                                                                                            className="border rounded px-2 py-1 text-sm w-32"
+                                                                                        />
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => handleAddTimeSlot(hallIndex, date)}
+                                                                                            className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                                                                                        >
+                                                                                            Add
+                                                                                        </button>
+                                                                                    </div>
+                                                                                    <div className="flex flex-wrap gap-2 mt-2">
+                                                                                        {screening.timeSlotsByDate[date.toDateString()]?.map((timeSlot, timeIndex) => (
+                                                                                            <div key={timeIndex} className="bg-gray-100 px-2 py-1 rounded-full text-sm flex items-center gap-1">
+                                                                                                <span>{timeSlot}</span>
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={() => handleRemoveTimeSlot(hallIndex, date, timeSlot)}
+                                                                                                    className="text-red-500 hover:text-red-700"
+                                                                                                >
+                                                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                                                                    </svg>
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {/* <div>
+                                                            <h4 className="text-sm font-medium text-gray-700 mb-2">Add Time Slots</h4>
+                                                            <div className="space-y-4">
+                                                                {screening.selectedDates.map(date => (
+                                                                    <div key={date.toDateString()} className="space-y-4 p-4 bg-gray-100 rounded-lg mb-4">
+                                                                        <h4 className="font-medium text-gray-700">
+                                                                            {date.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                                                        </h4>
+                                                                        <div className="flex gap-2">
+                                                                            <input
+                                                                                type="time"
+                                                                                value={newTimeSlot}
+                                                                                onChange={(e) => setNewTimeSlot(e.target.value)}
+                                                                                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleAddTimeSlot(hallIndex, date)}
+                                                                                className="px-4 py-2 bg-black text-white rounded-lg"
+                                                                            >
+                                                                                Add Time
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                                            {(screening.timeSlotsByDate[date.toDateString()] || []).map(timeSlot => (
+                                                                                <button
+                                                                                    key={timeSlot}
+                                                                                    onClick={() => handleRemoveTimeSlot(hallIndex, date, timeSlot)}
+                                                                                    className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+                                                                                >
+                                                                                    {timeSlot} ×
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div> */}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                                 {formData.trailerYouTubeId && (
-                                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-gray-100">
+                                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-gray-100 shadow-md mt-8">
                                         <iframe
                                             width="100%"
                                             height="100%"
@@ -474,22 +505,24 @@ export default function AddMoviesView() {
                                         ></iframe>
                                     </div>
                                 )}
+                                <div className="flex flex-col gap-4 pt-4">
+                                    <div className="flex justify-end gap-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate('/movies')}
+                                            className="px-6 py-3 rounded-xl text-black bg-gray-100 hover:bg-gray-200 transition-colors duration-200 shadow-sm"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="px-6 py-3 rounded-xl text-white bg-black hover:bg-gray-800 transition-colors duration-200 shadow-sm"
+                                        >
+                                            Create Movie
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        <div className="flex justify-end gap-4">
-                            <button
-                                type="button"
-                                className="px-6 py-3 rounded-xl text-black bg-gray-100 hover:bg-gray-200 transition-colors duration-200"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-6 py-3 rounded-xl text-white bg-black hover:bg-gray-800 transition-colors duration-200"
-                            >
-                                Add Movie
-                            </button>
                         </div>
                     </form>
                 </div>
