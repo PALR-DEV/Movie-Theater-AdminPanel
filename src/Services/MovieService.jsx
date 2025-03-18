@@ -55,14 +55,25 @@ class MovieService {
     }
 
     async addMovie(movieData) {
-        // Transform the screenings data to match the new structure
-        const formattedScreenings = movieData.screenings.map(screening => ({
-            sala: screening.sala,
-            time_slots: Object.entries(screening.timeSlotsByDate || {}).map(([date, timeSlots]) => ({
-                date: date, // Store the date string (e.g., "Tue Mar 22 2025")
-                times: timeSlots // Array of time slots for that date (e.g., ["1:00 PM", "4:00 PM"])
-            }))
-        }));
+        // Check if the data already has the correct structure with time_slots
+        const formattedScreenings = movieData.screenings.map(screening => {
+            // If the data already has time_slots, use it directly
+            if (screening.time_slots) {
+                return {
+                    sala: screening.sala,
+                    time_slots: screening.time_slots
+                };
+            }
+            
+            // Otherwise, transform from timeSlotsByDate
+            return {
+                sala: screening.sala,
+                time_slots: Object.entries(screening.timeSlotsByDate || {}).map(([date, timeSlots]) => ({
+                    date: date, // Store the date string (e.g., "Tue Mar 22 2025")
+                    times: timeSlots // Array of time slots for that date (e.g., ["1:00 PM", "4:00 PM"])
+                }))
+            };
+        });
 
         const { data, error } = await supabase
             .from('Movies')
@@ -70,7 +81,7 @@ class MovieService {
                 title: movieData.title,
                 trailer_youtube_id: movieData.trailerYouTubeId,
                 duration: movieData.duration,
-                poster_url: movieData.posterUrl,
+                poster_url: movieData.posterUrl, // Map posterUrl from form to poster_url in database
                 categories: movieData.categories,
                 screenings: formattedScreenings // Use the transformed screenings data
             }])
