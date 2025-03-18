@@ -81,7 +81,7 @@ class MovieService {
                 title: movieData.title,
                 trailer_youtube_id: movieData.trailerYouTubeId,
                 duration: movieData.duration,
-                poster_url: movieData.posterUrl, // Map posterUrl from form to poster_url in database
+                poster_url: movieData.poster_url, // Map posterUrl from form to poster_url in database
                 categories: movieData.categories,
                 screenings: formattedScreenings // Use the transformed screenings data
             }])
