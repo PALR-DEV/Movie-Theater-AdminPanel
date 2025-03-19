@@ -91,10 +91,19 @@ export default function AddMovieView() {
 
     const handleDateChange = (hallIndex, date) => {
         setFormData(prev => {
-            if (!date || !(date instanceof Date) || isNaN(date.getTime()) || date < new Date()) {
-                return prev; // Skip invalid or past dates
+            if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+                return prev; // Skip invalid dates (removed the date < new Date() check)
             }
 
+            // Create a new Date object for today with time set to 00:00:00
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // If the date is before today (not including today), skip it
+            if (date < today) {
+                return prev;
+            }
+            
             return {
                 ...prev,
                 screenings: prev.screenings.map((screening, index) => {
@@ -384,7 +393,11 @@ export default function AddMovieView() {
                                                                         selectedDate.toDateString() === date.toDateString()
                                                                     ) ? 'bg-black text-white rounded-full' : undefined
                                                                 }
-                                                                minDate={new Date()}
+                                                                minDate={(() => {
+                                                                    const today = new Date();
+                                                                    today.setHours(0, 0, 0, 0);
+                                                                    return today;
+                                                                })()}
                                                                 placeholderText="Select dates"
                                                                 dateFormat="MMMM d, yyyy"
                                                                 isClearable={false}
@@ -396,13 +409,13 @@ export default function AddMovieView() {
                                                                     <label className="block text-gray-700 text-sm font-bold mb-2">Screening Dates and Times</label>
                                                                     <div className="flex flex-wrap gap-4">
                                                                         {screening.selectedDates.map((date, dateIndex) => (
-                                                                            <div key={dateIndex} className="bg-white p-4 rounded-lg shadow-md w-64">
-                                                                                <div className="flex justify-between items-center mb-3">
+                                                                            <div key={dateIndex} className="bg-white p-4 rounded-xl shadow-md w-64 border border-gray-200 hover:shadow-lg transition-shadow duration-200">
+                                                                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
                                                                                     <span className="font-semibold">{date.toDateString()}</span>
                                                                                     <button
                                                                                         type="button"
                                                                                         onClick={() => handleRemoveDate(hallIndex, date)}
-                                                                                        className="text-red-500 hover:text-red-700"
+                                                                                        className="text-black hover:text-gray-700 transition-colors duration-200"
                                                                                     >
                                                                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                                                                             <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -415,24 +428,24 @@ export default function AddMovieView() {
                                                                                             type="time"
                                                                                             value={newTimeSlot}
                                                                                             onChange={(e) => setNewTimeSlot(e.target.value)}
-                                                                                            className="border rounded px-2 py-1 text-sm w-32"
+                                                                                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow duration-200"
                                                                                         />
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={() => handleAddTimeSlot(hallIndex, date)}
-                                                                                            className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                                                                                            className="bg-black text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-800 transition-colors duration-200 shadow-sm"
                                                                                         >
                                                                                             Add
                                                                                         </button>
                                                                                     </div>
-                                                                                    <div className="flex flex-wrap gap-2 mt-2">
+                                                                                    <div className="flex flex-wrap gap-2 mt-3">
                                                                                         {screening.timeSlotsByDate[date.toDateString()]?.map((timeSlot, timeIndex) => (
-                                                                                            <div key={timeIndex} className="bg-gray-100 px-2 py-1 rounded-full text-sm flex items-center gap-1">
-                                                                                                <span>{timeSlot}</span>
+                                                                                            <div key={timeIndex} className="bg-gray-100 px-3 py-2 rounded-lg text-sm flex items-center gap-2 shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200">
+                                                                                                <span className="font-medium">{timeSlot}</span>
                                                                                                 <button
                                                                                                     type="button"
                                                                                                     onClick={() => handleRemoveTimeSlot(hallIndex, date, timeSlot)}
-                                                                                                    className="text-red-500 hover:text-red-700"
+                                                                                                    className="text-black hover:text-gray-700 transition-colors duration-200"
                                                                                                 >
                                                                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                                                                                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

@@ -130,7 +130,6 @@ export default function EditMovieView() {
                     )
                     .map(screening => ({
                         sala: screening.sala,
-                        selectedDates: screening.selectedDates.map(date => date.toISOString()),
                         timeSlotsByDate: screening.timeSlotsByDate
                     }))
             };
@@ -173,19 +172,19 @@ export default function EditMovieView() {
             screenings: prev.screenings.map((screening, index) => {
                 if (index !== hallIndex) return screening;
                 
+                // Convert to array if it's a single date
                 const newDates = Array.isArray(dates) ? dates : [dates];
-                const uniqueDates = Array.from(new Set(newDates.map(d => d.toDateString())))
+                
+                // Combine existing dates with new dates
+                const allDates = [...screening.selectedDates, ...newDates];
+                
+                // Create unique dates based on date string
+                const uniqueDates = Array.from(new Set(allDates.map(d => d.toDateString())))
                     .map(str => new Date(str))
                     .sort((a, b) => a.getTime() - b.getTime());
                 
+                // Keep the existing time slots
                 const updatedTimeSlots = { ...screening.timeSlotsByDate };
-                const existingDates = new Set(uniqueDates.map(d => d.toDateString()));
-                
-                Object.keys(updatedTimeSlots).forEach(dateStr => {
-                    if (!existingDates.has(dateStr)) {
-                        delete updatedTimeSlots[dateStr];
-                    }
-                });
                 
                 return {
                     ...screening,
