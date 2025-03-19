@@ -9,6 +9,7 @@ import EditMovieView from './Views/EditMovieView'
 import SettingsView from './Views/SettingsView'
 import EmployeesView from './Views/EmployeesView'
 import TransactionView from './Views/TransactionView'
+import FoodItemsView from './Views/FoodItemsView'
 
 function App() {
   const [session, setSession] = useState(null);
@@ -56,6 +57,7 @@ function App() {
             <Route path="/settings" element={<SettingsView />} />
             <Route path='/employees' element={<EmployeesView/>}/>
             {/* <Route path='transactions' element={<TransactionView/>}/> */}
+            <Route path='/menu-items' element={<FoodItemsView/>}/>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </>
