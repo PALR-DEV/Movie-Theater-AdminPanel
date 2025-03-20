@@ -160,6 +160,7 @@ class MovieService {
             };
 
         } catch (error) {
+            console.log(error)
             console.error("Update failed:", error);
             throw error;
         }

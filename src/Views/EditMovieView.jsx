@@ -148,7 +148,6 @@ export default function EditMovieView() {
             AlertUtils.showSuccess('Movie updated successfully!');
             navigate('/movies');
         } catch (error) {
-            console.error('Update error:', error);
             AlertUtils.showError(`Error updating movie: ${error.message}`);
         } finally {
             AlertUtils.closeLoading();

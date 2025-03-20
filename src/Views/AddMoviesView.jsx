@@ -6,6 +6,7 @@ import AlertUtils from '../Utils/AlertUtils';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import '../assets/datepicker-custom.css';
+import { supabase } from '../Config/supabase';
 
 export default function AddMovieView() {
     const navigate = useNavigate();
@@ -218,6 +219,7 @@ export default function AddMovieView() {
                 duration: formData.duration.trim(),
                 poster_url: formData.posterUrl || '',
                 categories: selectedCategories,
+                client_id:(await supabase.auth.getUser()).data.user.id,
                 screenings: formData.screenings
                     .filter(screening =>
                         screening.sala &&

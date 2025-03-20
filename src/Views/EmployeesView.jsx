@@ -140,7 +140,8 @@ export default function EmployeesView() {
                     role: newEmployee.role,
                     email: newEmployee.email,
                     phone: newEmployee.phone,
-                    password: newEmployee.password
+                    password: newEmployee.password,
+                    client_id:(await supabase.auth.getUser()).data.user.id
                 }])
                 .select();
 
