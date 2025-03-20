@@ -1,17 +1,58 @@
 import Layout from "./Layout";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import AlertUtils from "../Utils/AlertUtils";
+import { supabase } from "../Config/supabase";
 
 export default function FoodItemsView() {
+    const [imagePreview, setImagePreview] = useState(null);
+    const fileInputRef = useRef(null);
+
+    async function StoreImage(file) {
+        try {
+            // Generate unique filename
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}.${fileExt}`;
+            
+            // Define the folder structure
+            const folderPath = 'cineTown/';
+            const filePath = `${folderPath}/${fileName}`;
+        
+            // Upload file to Supabase with folder structure
+            const { data, error } = await supabase.storage
+                .from('menu-items')
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+        
+            if (error) throw error;
+        
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('menu-items')
+                .getPublicUrl(filePath);
+        
+            return publicUrl;
+        } catch (error) {
+            AlertUtils.showError('Failed to upload image: ' + error.message);
+            throw error;
+        }
+    }
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
+        const imageFile = formData.get('image');
+        
+        // Convert image file to base64
+        const base64Image = imageFile instanceof File ? await convertToBase64(imageFile) : imageFile;
+        
         const newItem = {
             name: formData.get('name'),
             price: parseFloat(formData.get('price')),
             description: formData.get('description'),
             category: formData.get('category'),
-            image: formData.get('image')
+            image: base64Image
         };
 
         try {
@@ -36,6 +77,22 @@ export default function FoodItemsView() {
             setIsModalOpen(false);
         } catch (error) {
             AlertUtils.showError('Failed to save item');
+        }
+    };
+
+    const convertToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setImagePreview(URL.createObjectURL(file));
         }
     };
 
@@ -237,7 +294,7 @@ export default function FoodItemsView() {
                             </h3>
 
                             <form onSubmit={handleSubmit} className="space-y-6">
-                                {['name', 'price', 'description', 'category', 'image'].map((field) => (
+                                {['name', 'price', 'description', 'category'].map((field) => (
                                     <div key={field} className="relative">
                                         {field === 'category' ? (
                                             <select
@@ -276,6 +333,40 @@ export default function FoodItemsView() {
                                     </div>
                                 ))}
                             
+                                {/* Image Upload Field */}
+                                <div className="relative">
+                                    <input
+                                        type="file"
+                                        id="image"
+                                        name="image"
+                                        accept="image/*"
+                                        onChange={handleImageChange}
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        required={!editingItem}
+                                    />
+                                    <div className="border border-gray-200 rounded-xl p-4">
+                                        <div className="flex flex-col items-center gap-4">
+                                            {(imagePreview || editingItem?.image) && (
+                                                <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-50">
+                                                    <img
+                                                        src={imagePreview || editingItem?.image}
+                                                        alt="Preview"
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
+                                            >
+                                                {imagePreview || editingItem?.image ? 'Change Image' : 'Upload Image'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="mt-8 flex justify-end gap-3">
                                     <button
                                         type="button"
