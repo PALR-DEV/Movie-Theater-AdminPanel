@@ -1,22 +1,46 @@
 import Layout from "./Layout";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import AlertUtils from "../Utils/AlertUtils";
 import { supabase } from "../Config/supabase";
 
 export default function FoodItemsView() {
     const [imagePreview, setImagePreview] = useState(null);
     const fileInputRef = useRef(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState(null);
+    const [debug_hasEmpty, setdebug_hasEmpty] = useState(true);
+    const [menuItems, setMenuItems] = useState([])
+
+    useEffect(() => {
+        async function fetchMenuItems() {
+            try {
+                const { data, error } = await supabase
+                    .from('MenuItems')
+                    .select('*');
+                if (error) throw error;
+                setMenuItems(data);
+            } catch (error) {
+                AlertUtils.showError('Failed to fetch menu items: ' + error.message);
+            }
+        }
+        fetchMenuItems();
+    }, [])
+
+
 
     async function StoreImage(file) {
         try {
+            // Get the authenticated user's ID
+            const userId = (await supabase.auth.getUser()).data.user.id;
+            
             // Generate unique filename
             const fileExt = file.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExt}`;
             
-            // Define the folder structure
-            const folderPath = 'cineTown/';
-            const filePath = `${folderPath}/${fileName}`;
-        
+            // Define the folder structure with the user's ID
+            const folderPath = `cineTown/${userId}/`;
+            const filePath = `${folderPath}${fileName}`;
+            
             // Upload file to Supabase with folder structure
             const { data, error } = await supabase.storage
                 .from('menu-items')
@@ -24,14 +48,15 @@ export default function FoodItemsView() {
                     cacheControl: '3600',
                     upsert: true
                 });
-        
+            
             if (error) throw error;
-        
+            
             // Get public URL
-            const { data: { publicUrl } } = supabase.storage
+            const { data: { publicUrl } } = await supabase.storage
                 .from('menu-items')
                 .getPublicUrl(filePath);
-        
+    
+            console.log(publicUrl);
             return publicUrl;
         } catch (error) {
             AlertUtils.showError('Failed to upload image: ' + error.message);
@@ -44,20 +69,33 @@ export default function FoodItemsView() {
         const formData = new FormData(e.target);
         const imageFile = formData.get('image');
         
-        // Convert image file to base64
-        const base64Image = imageFile instanceof File ? await convertToBase64(imageFile) : imageFile;
-        
-        const newItem = {
-            name: formData.get('name'),
-            price: parseFloat(formData.get('price')),
-            description: formData.get('description'),
-            category: formData.get('category'),
-            image: base64Image
-        };
-
         try {
+            let imageUrl = editingItem?.image; // Keep existing image URL if editing
+            
+            // Only upload new image if a file is selected
+            if (imageFile instanceof File) {
+                imageUrl = await StoreImage(imageFile);
+            }
+            
+            const newItem = {
+                name: formData.get('name'),
+                price: parseFloat(formData.get('price')),
+                description: formData.get('description'),
+                category: formData.get('category'),
+                client_id: (await supabase.auth.getUser()).data.user.id,
+                image: imageUrl
+            };
+    
             if (editingItem) {
-                // Update existing item
+                // Update existing item in database
+                const { error } = await supabase
+                    .from('MenuItems')
+                    .update(newItem)
+                    .eq('id', editingItem.id);
+                    
+                if (error) throw error;
+                
+                // Update local state
                 setMenuItems(prev =>
                     prev.map(item =>
                         item.id === editingItem.id
@@ -67,16 +105,24 @@ export default function FoodItemsView() {
                 );
                 AlertUtils.showSuccess('Item updated successfully!');
             } else {
-                // Add new item
-                setMenuItems(prev => [
-                    ...prev,
-                    { ...newItem, id: Date.now() }
-                ]);
+                // Insert new item into database
+                const { data, error } = await supabase
+                    .from('MenuItems')
+                    .insert(newItem)
+                    .select();
+                    
+                if (error) throw error;
+                
+                // Update local state
+                setMenuItems(prev => [...prev, data[0]]);
                 AlertUtils.showSuccess('Item added successfully!');
             }
+            
             setIsModalOpen(false);
+            setImagePreview(null);
+            
         } catch (error) {
-            AlertUtils.showError('Failed to save item');
+            AlertUtils.showError('Failed to save item: ' + error.message);
         }
     };
 
@@ -113,49 +159,13 @@ export default function FoodItemsView() {
         }
     };
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingItem, setEditingItem] = useState(null);
-    const [debug_hasEmpty, setdebug_hasEmpty] = useState(true);
-    const [menuItems, setMenuItems] = useState([
-        {
-            id: 1,
-            name: "Popcorn Combo",
-            price: 12.99,
-            description: "Fresh popcorn with your choice of seasoning",
-            category: "Snacks",
-            image: "https://images.pexels.com/photos/33129/popcorn-movie-party-entertainment.jpg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2" // Using emoji as placeholder
-        },
-        {
-            id: 2,
-            name: "Nachos Supreme",
-            price: 9.99,
-            description: "Crispy nachos with cheese sauce and jalapeños",
-            category: "Snacks",
-            image: "https://images.pexels.com/photos/6004198/pexels-photo-6004198.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
-        },
-        {
-            id: 3,
-            name: "Soft Drink",
-            price: 4.99,
-            description: "Your choice of carbonated beverage",
-            category: "Beverages",
-            image: "https://images.pexels.com/photos/1904262/pexels-photo-1904262.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
-        },
-        {
-            id: 4,
-            name: "Hot Dog Deluxe",
-            price: 8.99,
-            description: "Premium hot dog with your choice of toppings",
-            category: "Snacks",
-            image: "https://images.pexels.com/photos/4676409/pexels-photo-4676409.jpeg"
-        }
-    ]);
+    
 
     return (
         <Layout>
-            <div className="space-y-6">
-                {/* Header Section */}
-                <div className="flex justify-between items-center">
+            <div className="h-[calc(100vh-80px)] flex flex-col">
+                {/* Header Section - Always visible */}
+                <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold text-gray-900">Food & Beverages</h1>
                     <button
                         onClick={() => {
@@ -182,85 +192,125 @@ export default function FoodItemsView() {
                     </button>
                 </div>
 
-                {/* Menu Items Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {menuItems.map((item) => (
-                        <div
-                            key={item.id}
-                            className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow 
-                            duration-200 overflow-hidden border border-gray-100"
-                        >
-                            {/* Item Image */}
-                            <div className="h-40 bg-gray-50 flex items-center justify-center overflow-hidden">
-                                <img 
-                                    src={item.image} 
-                                    alt={item.name}
-                                    className="object-cover w-full h-full"
-                                />
+                {/* Content Section - Conditional Rendering */}
+                {menuItems.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="mx-auto w-24 h-24 mb-4 text-gray-400">
+                                <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} 
+                                        d="M15 3v4a1 1 0 001 1h4M14 13v4m0 0v4m0-4h4m-4 0H10m-5.498 2H4.5c-.375 0-.745-.107-1.068-.31a2.262 2.262 0 01-.848-.83 2.214 2.214 0 01-.324-1.166V6.5c0-.375.107-.745.31-1.068.204-.322.49-.583.83-.748.339-.165.714-.25 1.09-.25h11.176c.376 0 .751.085 1.09.25.34.165.626.426.83.748.203.323.31.693.31 1.068v4.174" 
+                                    />
+                                </svg>
                             </div>
-                            
-                            {/* Item Details */}
-                            <div className="p-4 space-y-2">
-                                <div className="flex justify-between items-start">
-                                    <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                                    <span className="text-green-600 font-medium">
-                                        ${item.price.toFixed(2)}
-                                    </span>
+                            <h3 className="text-xl font-medium text-gray-900 mb-2">No menu items yet</h3>
+                            <p className="text-gray-500 mb-6">Get started by adding your first menu item.</p>
+                            <button
+                                onClick={() => {
+                                    setEditingItem(null);
+                                    setIsModalOpen(true);
+                                }}
+                                className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 
+                                transition-colors duration-200 gap-2"
+                            >
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                                    />
+                                </svg>
+                                Add Your First Item
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {menuItems.map((item) => (
+                            <div
+                                key={item.id}
+                                className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow 
+                                duration-200 overflow-hidden border border-gray-100"
+                            >
+                                {/* Item Image */}
+                                <div className="h-40 bg-gray-50 flex items-center justify-center overflow-hidden">
+                                    <img 
+                                        src={item.image} 
+                                        alt={item.name}
+                                        className="object-cover w-full h-full"
+                                    />
                                 </div>
-                                <p className="text-sm text-gray-500">{item.description}</p>
-                                <div className="pt-2 flex justify-between items-center">
-                                    <span className="text-xs font-medium text-gray-500 bg-gray-100 
-                                    px-2 py-1 rounded-full">
-                                        {item.category}
-                                    </span>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => {
-                                                setEditingItem(item);
-                                                setIsModalOpen(true);
-                                            }}
-                                            className="text-gray-600 hover:text-gray-900 transition-colors"
-                                            title="Edit item"
-                                        >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
+                                
+                                {/* Item Details */}
+                                <div className="p-4 space-y-2">
+                                    <div className="flex justify-between items-start">
+                                        <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                                        <span className="text-green-600 font-medium">
+                                            ${item.price.toFixed(2)}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-500">{item.description}</p>
+                                    <div className="pt-2 flex justify-between items-center">
+                                        <span className="text-xs font-medium text-gray-500 bg-gray-100 
+                                        px-2 py-1 rounded-full">
+                                            {item.category}
+                                        </span>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setEditingItem(item);
+                                                    setIsModalOpen(true);
+                                                }}
+                                                className="text-gray-600 hover:text-gray-900 transition-colors"
+                                                title="Edit item"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteItem(item.id)}
-                                            className="text-red-600 hover:text-red-900 transition-colors"
-                                            title="Delete item"
-                                        >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                                    />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteItem(item.id)}
+                                                className="text-red-600 hover:text-red-900 transition-colors"
+                                                title="Delete item"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                                />
-                                            </svg>
-                                        </button>
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Modal */}
