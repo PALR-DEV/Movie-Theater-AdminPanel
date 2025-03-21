@@ -54,9 +54,6 @@ export default function FoodItemsView() {
         }
     }
 
-    
-
-
 
     const handleSubmit = async (e) => {
         e.preventDefault();
