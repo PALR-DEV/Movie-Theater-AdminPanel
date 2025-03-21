@@ -4,16 +4,17 @@ import AlertUtils from "../Utils/AlertUtils";
 import { supabase } from "../Config/supabase";
 
 export default function FoodItemsView() {
-    const [imagePreview, setImagePreview] = useState(null);
-    const fileInputRef = useRef(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
-    const [debug_hasEmpty, setdebug_hasEmpty] = useState(true);
-    const [menuItems, setMenuItems] = useState([])
+    const [menuItems, setMenuItems] = useState([]);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         async function fetchMenuItems() {
             try {
+                setIsLoading(true);
                 const { data, error } = await supabase
                     .from('MenuItems')
                     .select('*');
@@ -21,42 +22,31 @@ export default function FoodItemsView() {
                 setMenuItems(data);
             } catch (error) {
                 AlertUtils.showError('Failed to fetch menu items: ' + error.message);
+            } finally {
+                setIsLoading(false);
             }
         }
         fetchMenuItems();
     }, [])
 
 
-
-    async function StoreImage(file) {
+    async function uploadImage(file) {
         try {
-            // Get the authenticated user's ID
             const userId = (await supabase.auth.getUser()).data.user.id;
-            
-            // Generate unique filename
             const fileExt = file.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExt}`;
-            
-            // Define the folder structure with the user's ID
-            const folderPath = `cineTown/${userId}/`;
-            const filePath = `${folderPath}${fileName}`;
-            
-            // Upload file to Supabase with folder structure
-            const { data, error } = await supabase.storage
+            const filePath = `${userId}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
                 .from('menu-items')
-                .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: true
-                });
-            
-            if (error) throw error;
-            
-            // Get public URL
-            const { data: { publicUrl } } = await supabase.storage
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
                 .from('menu-items')
                 .getPublicUrl(filePath);
-    
-            console.log(publicUrl);
+
             return publicUrl;
         } catch (error) {
             AlertUtils.showError('Failed to upload image: ' + error.message);
@@ -64,30 +54,33 @@ export default function FoodItemsView() {
         }
     }
 
+    
+
+
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const imageFile = formData.get('image');
         
         try {
-            let imageUrl = editingItem?.image; // Keep existing image URL if editing
-            
-            // Only upload new image if a file is selected
+            AlertUtils.showLoading('Saving item...');
+            let imageUrl = editingItem?.image;
+
             if (imageFile instanceof File) {
-                imageUrl = await StoreImage(imageFile);
+                imageUrl = await uploadImage(imageFile);
             }
             
             const newItem = {
-                name: formData.get('name'),
-                price: parseFloat(formData.get('price')),
+                itemName: formData.get('name'),
+                itemPrice: parseFloat(formData.get('price')),
                 description: formData.get('description'),
                 category: formData.get('category'),
                 client_id: (await supabase.auth.getUser()).data.user.id,
-                image: imageUrl
+                itemImagePath: imageUrl
             };
-    
+
             if (editingItem) {
-                // Update existing item in database
                 const { error } = await supabase
                     .from('MenuItems')
                     .update(newItem)
@@ -95,7 +88,6 @@ export default function FoodItemsView() {
                     
                 if (error) throw error;
                 
-                // Update local state
                 setMenuItems(prev =>
                     prev.map(item =>
                         item.id === editingItem.id
@@ -105,7 +97,6 @@ export default function FoodItemsView() {
                 );
                 AlertUtils.showSuccess('Item updated successfully!');
             } else {
-                // Insert new item into database
                 const { data, error } = await supabase
                     .from('MenuItems')
                     .insert(newItem)
@@ -113,26 +104,15 @@ export default function FoodItemsView() {
                     
                 if (error) throw error;
                 
-                // Update local state
                 setMenuItems(prev => [...prev, data[0]]);
                 AlertUtils.showSuccess('Item added successfully!');
             }
             
             setIsModalOpen(false);
             setImagePreview(null);
-            
         } catch (error) {
             AlertUtils.showError('Failed to save item: ' + error.message);
         }
-    };
-
-    const convertToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = (error) => reject(error);
-        });
     };
 
     const handleImageChange = (e) => {
@@ -141,25 +121,6 @@ export default function FoodItemsView() {
             setImagePreview(URL.createObjectURL(file));
         }
     };
-
-    const handleDeleteItem = async (id) => {
-        try {
-            const result = await AlertUtils.showConfirm(
-                'Delete Item',
-                'Are you sure you want to delete this item?'
-            );
-
-            if (result.isConfirmed) {
-                AlertUtils.showLoading('Deleting item...');
-                setMenuItems(prev => prev.filter(item => item.id !== id));
-                AlertUtils.showSuccess('Item deleted successfully!');
-            }
-        } catch (error) {
-            AlertUtils.showError('Failed to delete item');
-        }
-    };
-
-    
 
     return (
         <Layout>
@@ -192,8 +153,13 @@ export default function FoodItemsView() {
                     </button>
                 </div>
 
-                {/* Content Section - Conditional Rendering */}
-                {menuItems.length === 0 ? (
+                {/* Content Section - Conditional Rendering with Loading State */}
+                {isLoading ? (
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-black" />
+                        <span className="sr-only">Loading...</span>
+                    </div>
+                ) : menuItems.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
                             <div className="mx-auto w-24 h-24 mb-4 text-gray-400">
@@ -242,8 +208,8 @@ export default function FoodItemsView() {
                                 {/* Item Image */}
                                 <div className="h-40 bg-gray-50 flex items-center justify-center overflow-hidden">
                                     <img 
-                                        src={item.image} 
-                                        alt={item.name}
+                                        src={item.itemImagePath} 
+                                        alt={item.itemName}
                                         className="object-cover w-full h-full"
                                     />
                                 </div>
@@ -251,9 +217,9 @@ export default function FoodItemsView() {
                                 {/* Item Details */}
                                 <div className="p-4 space-y-2">
                                     <div className="flex justify-between items-start">
-                                        <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                                        <h3 className="font-semibold text-gray-900">{item.itemName}</h3>
                                         <span className="text-green-600 font-medium">
-                                            ${item.price.toFixed(2)}
+                                            ${(item.itemPrice || 0).toFixed(2)}
                                         </span>
                                     </div>
                                     <p className="text-sm text-gray-500">{item.description}</p>
@@ -368,7 +334,7 @@ export default function FoodItemsView() {
                                                 name={field}
                                                 step={field === 'price' ? '0.01' : undefined}
                                                 min={field === 'price' ? '0' : undefined}
-                                                defaultValue={editingItem?.[field]}
+                                                defaultValue={field === 'price' ? editingItem?.itemPrice : editingItem?.itemName}
                                                 placeholder=" "
                                                 required
                                                 className="peer w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black transition-all duration-200 outline-none placeholder-transparent"
