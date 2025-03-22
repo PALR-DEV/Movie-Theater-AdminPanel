@@ -6,6 +6,7 @@ class MovieService {
             .from('Movies')
             .select('*')
             .order('id', { ascending: true })
+            .eq('client_id', (await supabase.auth.getUser()).data.user.id);
         if (error) {
             throw error
         }
