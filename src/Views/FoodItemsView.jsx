@@ -2,6 +2,7 @@ import Layout from "./Layout";
 import { useState, useRef, useEffect } from "react";
 import AlertUtils from "../Utils/AlertUtils";
 import { supabase } from "../Config/supabase";
+import CommingSoonView from "./CommingSoonView";
 
 export default function FoodItemsView() {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -11,23 +12,23 @@ export default function FoodItemsView() {
     const [isLoading, setIsLoading] = useState(true);
     const fileInputRef = useRef(null);
 
-    useEffect(() => {
-        async function fetchMenuItems() {
-            try {
-                setIsLoading(true);
-                const { data, error } = await supabase
-                    .from('MenuItems')
-                    .select('*');
-                if (error) throw error;
-                setMenuItems(data);
-            } catch (error) {
-                AlertUtils.showError('Failed to fetch menu items: ' + error.message);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        fetchMenuItems();
-    }, [])
+    // useEffect(() => {
+    //     async function fetchMenuItems() {
+    //         try {
+    //             setIsLoading(true);
+    //             const { data, error } = await supabase
+    //                 .from('MenuItems')
+    //                 .select('*');
+    //             if (error) throw error;
+    //             setMenuItems(data);
+    //         } catch (error) {
+    //             AlertUtils.showError('Failed to fetch menu items: ' + error.message);
+    //         } finally {
+    //             setIsLoading(false);
+    //         }
+    //     }
+    //     fetchMenuItems();
+    // }, [])
 
 
     async function uploadImage(file) {
@@ -119,8 +120,8 @@ export default function FoodItemsView() {
         }
     };
 
-    return (
-        <Layout>
+    const renderFoodItemsUI = () => {
+        return (
             <div className="h-[calc(100vh-80px)] flex flex-col">
                 {/* Header Section - Always visible */}
                 <div className="flex justify-between items-center mb-6">
@@ -274,132 +275,140 @@ export default function FoodItemsView() {
                         ))}
                     </div>
                 )}
-            </div>
 
-            {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 overflow-y-auto">
-                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                        {/* Background overlay */}
-                        <div 
-                            className="fixed inset-0 transition-opacity bg-black/40 backdrop-blur-md" 
-                            onClick={() => setIsModalOpen(false)}
-                            aria-hidden="true"
-                        />
-
-                        {/* Modal panel */}
-                        <div 
-                            className="relative inline-block w-full max-w-lg p-8 my-8 overflow-hidden text-left align-middle transition-all transform bg-white rounded-2xl shadow-2xl sm:align-middle
-                            animate-[modal-slide_0.3s_ease-out] border border-gray-100"
-                        >
-                            {/* Close button */}
-                            <button
+                {/* Modal */}
+                {isModalOpen && (
+                    <div className="fixed inset-0 z-50 overflow-y-auto">
+                        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                            {/* Background overlay */}
+                            <div 
+                                className="fixed inset-0 transition-opacity bg-black/40 backdrop-blur-md" 
                                 onClick={() => setIsModalOpen(false)}
-                                className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 transition-all duration-200"
+                                aria-hidden="true"
+                            />
+
+                            {/* Modal panel */}
+                            <div 
+                                className="relative inline-block w-full max-w-lg p-8 my-8 overflow-hidden text-left align-middle transition-all transform bg-white rounded-2xl shadow-2xl sm:align-middle
+                                animate-[modal-slide_0.3s_ease-out] border border-gray-100"
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                                {/* Close button */}
+                                <button
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 transition-all duration-200"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
 
-                            <h3 className="text-xl font-semibold text-gray-900 mb-6">
-                                {editingItem ? 'Edit Item' : 'Add New Item'}
-                            </h3>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-6">
+                                    {editingItem ? 'Edit Item' : 'Add New Item'}
+                                </h3>
 
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                {['name', 'price', 'description', 'category'].map((field) => (
-                                    <div key={field} className="relative">
-                                        {field === 'category' ? (
-                                            <select
-                                                id={field}
-                                                name={field}
-                                                defaultValue={editingItem?.[field] || ''}
-                                                required
-                                                className="peer w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black transition-all duration-200 outline-none"
-                                            >
-                                                <option value="" disabled>Select a category</option>
-                                                <option value="Snacks">Snacks</option>
-                                                <option value="Beverages">Beverages</option>
-                                                <option value="Combos">Combos</option>
-                                                <option value="Desserts">Desserts</option>
-                                                <option value="Others">Others</option>
-                                            </select>
-                                        ) : (
-                                            <input
-                                                type={field === 'price' ? 'number' : 'text'}
-                                                id={field}
-                                                name={field}
-                                                step={field === 'price' ? '0.01' : undefined}
-                                                min={field === 'price' ? '0' : undefined}
-                                                defaultValue={field === 'price' ? editingItem?.itemPrice : editingItem?.itemName}
-                                                placeholder=" "
-                                                required
-                                                className="peer w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black transition-all duration-200 outline-none placeholder-transparent"
-                                            />
-                                        )}
-                                        <label
-                                            htmlFor={field}
-                                            className="absolute left-3 -top-2.5 bg-white px-2 text-sm text-gray-600 transition-all duration-200 peer-placeholder-shown:top-3.5 peer-placeholder-shown:left-4 peer-placeholder-shown:text-base peer-focus:-top-2.5 peer-focus:left-3 peer-focus:text-sm peer-focus:text-black capitalize"
-                                        >
-                                            {field}
-                                        </label>
-                                    </div>
-                                ))}
-                            
-                                {/* Image Upload Field */}
-                                <div className="relative">
-                                    <input
-                                        type="file"
-                                        id="image"
-                                        name="image"
-                                        accept="image/*"
-                                        onChange={handleImageChange}
-                                        ref={fileInputRef}
-                                        className="hidden"
-                                        required={!editingItem}
-                                    />
-                                    <div className="border border-gray-200 rounded-xl p-4">
-                                        <div className="flex flex-col items-center gap-4">
-                                            {(imagePreview || editingItem?.image) && (
-                                                <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-50">
-                                                    <img
-                                                        src={imagePreview || editingItem?.image}
-                                                        alt="Preview"
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                </div>
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                                    {['name', 'price', 'description', 'category'].map((field) => (
+                                        <div key={field} className="relative">
+                                            {field === 'category' ? (
+                                                <select
+                                                    id={field}
+                                                    name={field}
+                                                    defaultValue={editingItem?.[field] || ''}
+                                                    required
+                                                    className="peer w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black transition-all duration-200 outline-none"
+                                                >
+                                                    <option value="" disabled>Select a category</option>
+                                                    <option value="Snacks">Snacks</option>
+                                                    <option value="Beverages">Beverages</option>
+                                                    <option value="Combos">Combos</option>
+                                                    <option value="Desserts">Desserts</option>
+                                                    <option value="Others">Others</option>
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type={field === 'price' ? 'number' : 'text'}
+                                                    id={field}
+                                                    name={field}
+                                                    step={field === 'price' ? '0.01' : undefined}
+                                                    min={field === 'price' ? '0' : undefined}
+                                                    defaultValue={field === 'price' ? editingItem?.itemPrice : editingItem?.itemName}
+                                                    placeholder=" "
+                                                    required
+                                                    className="peer w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:border-black focus:ring-1 focus:ring-black transition-all duration-200 outline-none placeholder-transparent"
+                                                />
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => fileInputRef.current?.click()}
-                                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
+                                            <label
+                                                htmlFor={field}
+                                                className="absolute left-3 -top-2.5 bg-white px-2 text-sm text-gray-600 transition-all duration-200 peer-placeholder-shown:top-3.5 peer-placeholder-shown:left-4 peer-placeholder-shown:text-base peer-focus:-top-2.5 peer-focus:left-3 peer-focus:text-sm peer-focus:text-black capitalize"
                                             >
-                                                {imagePreview || editingItem?.image ? 'Change Image' : 'Upload Image'}
-                                            </button>
+                                                {field}
+                                            </label>
+                                        </div>
+                                    ))}
+                                
+                                    {/* Image Upload Field */}
+                                    <div className="relative">
+                                        <input
+                                            type="file"
+                                            id="image"
+                                            name="image"
+                                            accept="image/*"
+                                            onChange={handleImageChange}
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            required={!editingItem}
+                                        />
+                                        <div className="border border-gray-200 rounded-xl p-4">
+                                            <div className="flex flex-col items-center gap-4">
+                                                {(imagePreview || editingItem?.image) && (
+                                                    <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-50">
+                                                        <img
+                                                            src={imagePreview || editingItem?.image}
+                                                            alt="Preview"
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
+                                                >
+                                                    {imagePreview || editingItem?.image ? 'Change Image' : 'Upload Image'}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="mt-8 flex justify-end gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsModalOpen(false)}
-                                        className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black transition-colors duration-200"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-xl hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black transition-colors duration-200"
-                                    >
-                                        {editingItem ? 'Save Changes' : 'Add Item'}
-                                    </button>
-                                </div>
-                            </form>
+                                    <div className="mt-8 flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsModalOpen(false)}
+                                            className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black transition-colors duration-200"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-xl hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black transition-colors duration-200"
+                                        >
+                                            {editingItem ? 'Save Changes' : 'Add Item'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
+        );
+    };
+
+    
+
+    return (
+        <Layout>
+            <CommingSoonView />
         </Layout>
     );
 }
