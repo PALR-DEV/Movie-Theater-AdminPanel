@@ -39,7 +39,7 @@ const LoginView = () => {
                 <div className="absolute inset-0 bg-black opacity-60"></div>
                 <div className="h-full w-full flex items-center justify-center relative z-10">
                     <h1 className="text-4xl font-bold text-white text-center px-4">
-                        EL CINE MAYAGUEZ TOWN CENTER
+                        Theater Admin Panel
                     </h1>
                 </div>
             </div>

@@ -10,6 +10,7 @@ class MovieService {
         if (error) {
             throw error
         }
+        console.log(data)
         return data
     }
 
